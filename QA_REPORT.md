@@ -63,6 +63,24 @@ super_big=2098×, maxwin_*=15000×.
 
 ---
 
+## 3b. Warstwa „juice" — stan po przebudowie (2026-07)
+
+| Element | Status |
+|---|---|
+| Impact shake (skalowany wielkością fuzji) | ✅ `juice.shake` (perturbuje `pivot`, nie `position`) |
+| Stagger opadania per kolumna | ✅ `BoardView.gravity` |
+| Squash & stretch na lądowaniu | ✅ `juice.squash` |
+| Magnet-in: grupa wciągana do kotwicy | ✅ `BoardView.forge` |
+| Pulsowanie wygrywających relikwii | ✅ `BoardView.celebrate` |
+| Coin shower (pooled) | ✅ `juice.CoinShower` |
+| Anticipation nudge | ✅ |
+| Cząstki iskier | ✅ `Particles` |
+| **Custom typografia** | ⬜ nadal `system-ui` |
+| **UI w canvasie** (zamiast HTML pod spodem) | ⬜ |
+| Shadery / filtry Pixi | ⬜ |
+| Spritesheet idle/hit per symbol | ⬜ (są tweeny, brak klatkowych animacji) |
+| Muzyka z rytmem/melodią | ⬜ (nadal drony + akordy) |
+
 ## 4. Znane problemy / ograniczenia
 
 1. 🟡 **Skala symulacji** — obecnie 100k+/mode (pub+val). Do publikacji zalecane
@@ -76,6 +94,9 @@ super_big=2098×, maxwin_*=15000×.
 4. 🟡 **Testy E2E z RGS** — wymagają mocka RGS (resume, saldo, błędy) — do dodania.
 5. 🟡 **Property‑based** — dodać testy typu Hypothesis (niezmienniki fuzji na losowych planszach).
 6. `books_bonus.jsonl.zst` ~17.5 MB — akceptowalne, ale przy 1M/mode rozważyć podział.
+7. **Skip w długiej rundzie bonusowej trwa ~10 s** (było: zawieszenie >40 s — naprawione
+   przez synchroniczne rozwiązywanie tweenów przy aktywnym skipie). Do dalszej
+   optymalizacji: batchowanie eventów zamiast sekwencyjnego await per event.
 
 ## 5. Rekomendacja QA
 
