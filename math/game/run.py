@@ -33,8 +33,10 @@ from game.gamestate import play_book
 
 MODE_SEED = {"base": 10_000_000, "ante": 20_000_000,
              "bonus": 30_000_000, "super": 40_000_000}
-# wincap quota per mode (matches the wincap Distribution quotas in game_config)
-WINCAP_QUOTA = {"base": 0.0008, "ante": 0.0010, "bonus": 0.004, "super": 0.006}
+# how many forced max-win books to seed into each pool (must be >0)
+WINCAP_QUOTA = {"base": 0.001, "ante": 0.001, "bonus": 0.004, "super": 0.006}
+# TARGET probability of a max win per mode (the headline frequency we commit to)
+P_MAXWIN = {"base": 2.0e-6, "ante": 3.0e-6, "bonus": 3.0e-5, "super": 5.0e-4}
 
 
 def generate_pool(cfg, mode, n_pub, record=True):
@@ -82,7 +84,9 @@ def process_mode(cfg, mode, n_pub, n_val, out_dir):
     bm = cfg.mode(mode)
     t0 = time.time()
     books, px, pm, crit = generate_pool(cfg, mode, n_pub, record=True)
-    opt = optimizer.optimize_weights(pm, bm.cost, bm.rtp)
+    cap_mult = int(cfg.wincap * 100)
+    opt = optimizer.optimize_with_maxwin(pm, bm.cost, bm.rtp, cap_mult,
+                                         P_MAXWIN[mode])
     iw = optimizer.to_integer_weights(opt.weights)
     ach_rtp = optimizer.integer_weighted_rtp(pm, iw, bm.cost)
 
@@ -131,8 +135,8 @@ def main():
     modes = args.modes.split(",")
 
     # sensible per-mode defaults (bonus/super are heavier per book)
-    default_pub = {"base": 30000, "ante": 20000, "bonus": 15000, "super": 10000}
-    default_val = {"base": 300000, "ante": 150000, "bonus": 80000, "super": 50000}
+    default_pub = {"base": 30000, "ante": 20000, "bonus": 12000, "super": 8000}
+    default_val = {"base": 250000, "ante": 120000, "bonus": 40000, "super": 30000}
 
     index_modes, reports = [], {}
     for mode in modes:

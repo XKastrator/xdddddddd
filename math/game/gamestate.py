@@ -97,10 +97,10 @@ def play_forge_fury(book, cfg, rng, spins, fill_syms, fill_weights, heat_cap,
     E.bonus_start(book, "forge_fury", spins, "free")
     heat = 1
     if hot:  # forced max-win construction: rich seed + hot start + extra spins
-        fill_syms = [S.O1, S.O2, S.BRONZE, S.IRON, S.SILVER, S.WILD]
-        fill_weights = [10.0, 10.0, 24.0, 22.0, 18.0, 10.0]
-        heat = 8
-        spins = max(spins, 14)
+        fill_syms = [S.BRONZE, S.IRON, S.SILVER, S.GOLD, S.WILD]
+        fill_weights = [14.0, 22.0, 26.0, 20.0, 10.0]
+        heat = 15
+        spins = max(spins, 22)
     remaining, total = spins, spins
     while remaining > 0:
         remaining -= 1

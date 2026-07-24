@@ -95,6 +95,54 @@ def optimize_weights(payouts, cost, rtp, tol=1e-9, max_iter=300):
     )
 
 
+def optimize_with_maxwin(payouts, cost, rtp, cap_mult, p_max, tol=1e-9):
+    """Exact-RTP optimize while pinning the total probability of MAX-WIN books.
+
+    Max-win books (payoutMultiplier == cap_mult) collectively receive probability
+    `p_max` (a realistic, chosen target — the SDK 'wincap quota' idea). Non-cap
+    books are exp-tilted to carry the residual RTP. This keeps the headline
+    max-win frequency sane instead of letting the free tilt over-concentrate it.
+
+    Returns OptResult where `weights` sum to N and reproduce (rtp, p_max) exactly.
+    """
+    n = len(payouts)
+    cap_idx = [i for i, p in enumerate(payouts) if p >= cap_mult]
+    non_idx = [i for i, p in enumerate(payouts) if p < cap_mult]
+    if not cap_idx:
+        raise ValueError("no max-win books in pool")
+    if not non_idx:
+        raise ValueError("pool is only max-win books")
+
+    target_mean = rtp * cost * 100.0
+    # overall mean = p_max*cap + (1-p_max)*mean_noncap  =>  solve mean_noncap
+    mean_noncap = (target_mean - p_max * cap_mult) / (1.0 - p_max)
+    non_payouts = [payouts[i] for i in non_idx]
+    if not (min(non_payouts) <= mean_noncap <= max(non_payouts)):
+        raise ValueError(
+            f"residual non-cap mean {mean_noncap:.1f} outside "
+            f"[{min(non_payouts)}, {max(non_payouts)}] — adjust p_max or generation")
+
+    sub = optimize_weights(non_payouts, cost, mean_noncap / (cost * 100.0), tol=tol)
+    # assemble full weight vector (sum = n)
+    weights = [0.0] * n
+    # non-cap: scale sub-weights (which sum to len(non_idx)) to total mass (1-p_max)*n
+    s_noncap = sum(sub.weights)
+    for w, i in zip(sub.weights, non_idx):
+        weights[i] = w / s_noncap * (1.0 - p_max) * n
+    # cap: split p_max*n equally
+    for i in cap_idx:
+        weights[i] = p_max * n / len(cap_idx)
+
+    W = sum(weights)
+    achieved_mean = sum(weights[i] * payouts[i] for i in range(n)) / W
+    ess = (W ** 2) / sum(w * w for w in weights)
+    return OptResult(
+        weights=weights, lam=sub.lam, achieved_mean=achieved_mean,
+        achieved_rtp=achieved_mean / (cost * 100.0),
+        ess=ess, max_share=max(weights) / W, iterations=sub.iterations,
+    )
+
+
 def to_integer_weights(weights, precision=10_000):
     """Convert float weights to positive uint64-safe integers for the lookup CSV.
 
