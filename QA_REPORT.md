@@ -14,7 +14,7 @@
 | RTP / optymalizator | `math/tests/test_rtp.py` | optymalizator trafia RTP (int‑wagi), payout==eventy, pasma RTP | ✅ pass |
 | Max win / stateless | `math/tests/test_maxwin.py` | brak przekroczenia capu, forced cap==15000×, brak progresji między zakładami | ✅ pass |
 | Frontend typecheck | `frontend` `tsc --noEmit` | ścisłe typy TS | ✅ clean |
-| Frontend build | `vite build` | bundle produkcyjny | ✅ gra 37.5 kB / 13.7 kB gzip (pixi + fixture w osobnych chunkach) |
+| Frontend build | `vite build` | bundle produkcyjny + assety | ✅ gra 38.8 kB / 14.1 kB gzip; atlas 339 kB, audio 338 kB |
 | Player JS | `node --check` | składnia harnessu | ✅ ok |
 | **Renderer w przeglądarce** | `frontend/tests/smoke.mjs` (Playwright/Chromium) | loading screen, canvas, help (RTP+max win+drabina), Escape, spin base/bonus/super, **panel Buy: potwierdzenie i brak zakładu przed Confirm**, anulowanie zakupu, bilans, brak błędów, locale `pl` — mobile 390×844 + desktop 1280×800 | ✅ **36/36** |
 
@@ -69,8 +69,10 @@ super_big=2098×, maxwin_*=15000×.
    1M+/mode (percentyle tail 1k–10k dla base/ante, trajektorie bankrolla).
 2. ✅ **Renderer** — PixiJS + panel Buy, help/paytable, loading, WebAudio, cząstki,
    i18n; przetestowany w przeglądarce (36/36).
-3. ⬜ **Assety/audio** — proceduralne placeholdery (grafika: Pixi Graphics, dźwięk:
-   synteza WebAudio); finalne assety wg `ART_BIBLE.md` + Spine.
+3. 🟡 **Assety/audio** — istnieją realne pliki: atlas 13 symboli (autorski wektor,
+   339 kB) + 14 plików OGG (synteza numpy, 338 kB), preloadowane i wpięte w grę.
+   Pozostaje praca artysty: tła, postać Emberwrighta, animacje Spine, pełne cząstki
+   (`ART_BIBLE.md` §11–12).
 4. 🟡 **Testy E2E z RGS** — wymagają mocka RGS (resume, saldo, błędy) — do dodania.
 5. 🟡 **Property‑based** — dodać testy typu Hypothesis (niezmienniki fuzji na losowych planszach).
 6. `books_bonus.jsonl.zst` ~17.5 MB — akceptowalne, ale przy 1M/mode rozważyć podział.
@@ -79,7 +81,7 @@ super_big=2098×, maxwin_*=15000×.
 
 Warstwa matematyczna jest **przetestowana i spójna** (RTP, eventy, cap, determinizm),
 a renderer **zweryfikowany realnym uruchomieniem w przeglądarce** (36/36, mobile +
-desktop + locale pl). Przed publikacją: domknąć skalę 1M/mode, dostarczyć finalne
-assety graficzne/audio, dodać testy E2E z mockiem RGS (resume/saldo/błędy) oraz
-testy property‑based. Żaden test wykonany w tym repo nie jest oznaczony jako
+desktop + locale pl). Przed publikacją: domknąć skalę 1M/mode, zlecić artyście tła/postać/Spine
+(symbole i audio już są jako pliki), dodać testy E2E z mockiem RGS
+(resume/saldo/błędy) oraz testy property‑based. Żaden test wykonany w tym repo nie jest oznaczony jako
 „przeszedł”, jeśli faktycznie nie został uruchomiony.

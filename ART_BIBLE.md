@@ -1,8 +1,19 @@
 # ART_BIBLE.md — MOLTEN CROWN
 
-> Kierunek artystyczny + pełna lista assetów + animacje + audio.
-> Obecne assety w `frontend/player/` to **funkcjonalne placeholdery** (kształty/CSS),
-> nie finalna oprawa. Poniżej prompty produkcyjne dla artysty/generatora.
+> Kierunek artystyczny + pełna lista assetów + animacje + audio + **pipeline
+> generowania assetów** (§12).
+>
+> **Status assetów (uczciwie):**
+> - ✅ **Symbole (13) i cały zestaw audio (14 plików) istnieją jako realne pliki**
+>   — atlas tekstur `frontend/public/assets/atlas.png` (1024×1024) oraz
+>   `frontend/public/assets/audio/*.ogg`. Generowane skryptami z `assets/`.
+>   Art to **autorska grafika wektorowa** (gradienty, fazowania, emisyjne rimy),
+>   audio to **synteza numpy** (rezonatory metalu, bezszwowe pady) — nie sample.
+> - ⬜ **Nie są to assety rysowane ręcznie przez artystę 2D ani animacje Spine.**
+>   Tła, postać Emberwrighta, animacje szkieletowe i pełna oprawa cząstek pozostają
+>   pracą dla artysty — prompty produkcyjne w §11.
+> Placeholdery nie są przedstawiane jako finalna oprawa: poniżej jasno rozdzielono,
+> co jest wygenerowane, a co wymaga artysty.
 
 ---
 
@@ -124,3 +135,47 @@ narastający grzmot + lejąca się lawa; max win = chóralny hit + dzwon korony.
   orange ambient, distant anvils, cinematic, low‑contrast so foreground UI reads.”
 
 Placeholdery (obecne w `player/index.html`) zastąpić finalnymi assetami wg powyższego.
+
+---
+
+## 12. Pipeline assetów (jak je wygenerować / podmienić)
+
+```bash
+cd frontend && npm run assets     # art + atlas + audio, jednym poleceniem
+```
+Równoważnie:
+```bash
+python3 assets/generate_art.py    # autorskie SVG -> assets/build/atlas.html + atlas.json
+node    assets/rasterize.mjs      # rasteryzacja (headless Chromium) -> atlas.png
+python3 assets/generate_audio.py  # synteza numpy -> *.ogg (OGG Vorbis)
+```
+
+### Co powstaje
+
+| Plik | Zawartość | Rozmiar |
+|---|---|---|
+| `frontend/public/assets/atlas.png` | 13 symboli w siatce 4×4 po 256 px | ~339 kB |
+| `frontend/public/assets/atlas.json` | ramki (x, y, w, h) per symbol | ~1 kB |
+| `frontend/public/assets/audio/bed_{base,bonus,super}.ogg` | bezszwowe pady 8 s | ~63 kB każdy |
+| `.../sfx_{spin,forge,forge_big,heat,cinder,retrigger}.ogg` | SFX | 4–13 kB |
+| `.../sting_{bonus,super,pour,bigwin,maxwin}.ogg` | stingery | 16–29 kB |
+
+**Razem audio: 338 kB** (14 plików). Jedna tekstura = niskie draw calls na mobile.
+
+### Zasady utrzymane w generatorze
+- **Ruda nie ma numerału** (wszystkie warianty to ranga 0) — numerał sugerowałby
+  rangę i kolidowałby z relikwiami. Warianty rozróżnialne **sylwetką** (pięciokąt,
+  sześcian, romb, heksagon, nodul) + tintem — kluczowe dla wypatrywania grup 4+.
+- **Relikwie mają numerały I–V** (+ Korona bez numerału) → ranga nigdy nie zależy
+  wyłącznie od koloru (wymóg daltonizmu).
+- **Emisja rośnie z rangą** (`glow` 0.30 → 1.0), więc drabina jest czytelna
+  peryferyjnie.
+- **Pady loopują bezszwowo**: każda składowa mieści całkowitą liczbę cykli w pętli,
+  więc faza początku i końca jest identyczna.
+
+### Podmiana na assety artysty
+`AssetLoader` czyta wyłącznie `atlas.png` + `atlas.json`. Wystarczy dostarczyć
+atlas o tych samych nazwach ramek (`O1..O5, BRONZE, IRON, SILVER, GOLD, MYTHRIL,
+CROWN, FLUX, CINDER`) — kod renderera nie wymaga zmian. Analogicznie audio:
+te same nazwy plików `.ogg`. Jeśli atlas zniknie, `SymbolSprite` automatycznie
+wraca do kształtów proceduralnych (gra nadal działa i jest testowalna).

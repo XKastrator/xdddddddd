@@ -19,8 +19,9 @@
 | Runnable replay harness | ✅ `frontend/player/index.html` |
 | Testy (math) | ✅ `math/tests/` |
 | Art bible + prompty | ✅ `ART_BIBLE.md` |
-| **Produkcyjny renderer PixiJS** | ✅ `frontend/src/render/` — działa w przeglądarce, 12/12 checków |
-| Finalne assety/audio | ⬜ (proceduralne placeholdery + prompty w ART_BIBLE) |
+| **Produkcyjny renderer PixiJS** | ✅ `frontend/src/render/` — działa w przeglądarce, 36/36 checków |
+| Assety: symbole + audio | ✅ atlas 13 symboli + 14 OGG (pipeline w `assets/`) |
+| Assety: tła, postać, Spine | ⬜ (prompty w ART_BIBLE §11) |
 | Symulacja 1M/mode | 🟡 (100k+ zrobione; skala do zwiększenia) |
 
 ---
@@ -45,18 +46,22 @@ kontrolkami, `MockRgs` (realne książki), Vite build.
 RTP, max win, nota o losowości), `HelpScreen` (zasady, drabina rang, symbole
 specjalne, bonus/super, tryby, **RTP + max win**, RG), `Overlay` (dostępny modal:
 role=dialog, Escape, focus restore), `LoadingScreen` (realny progres),
-`WebAudioBackend` (syntezowane placeholdery SFX + ducking, autoplay‑safe),
+`WebAudioBackend` (odtwarzanie zdekodowanych OGG + ducking, autoplay‑safe),
 **i18n en/pl/de** + `currency.ts` wg `CurrencyMeta` RGS.
 **Test przeglądarkowy: 36/36 ✅** (mobile + desktop + locale pl).
-**Pozostaje:** finalne assety graficzne/audio (M5), Spine.
+**Pozostaje:** assety artysty — tła, postać, Spine (M5).
 
 ### M4 — Skala matematyki + certyfikacja ⬜/🟡
 1M+/mode, pełne bankroll MC, PAR sheet do audytu, replay‑verification vs frontend.
 **Zależności:** M1. **Priorytet:** wysoki przed publikacją. **Szac.:** 1 tydz.
 
-### M5 — Art & audio produkcyjne ⬜
-Symbole (13×3 stany), tła (4), UI, particles, Spine, audio (9 warstw), lobby tile.
-**Zależności:** ART_BIBLE. **Priorytet:** wysoki (równolegle z M3). **Szac.:** 4–6 tyg.
+### M5 — Art & audio produkcyjne 🟡 (częściowo DONE)
+✅ **Zrobione:** 13 symboli jako autorski wektor → atlas tekstur (jedna tekstura,
+339 kB), 14 plików audio OGG (pady base/bonus/super + SFX + stingery, 338 kB),
+pipeline odtwarzalny (`npm run assets`), preload z realnym progresem.
+⬜ **Pozostaje (artysta):** tła (4 sceny), postać Emberwrighta, animacje Spine,
+rozbudowane cząstki, lobby tile, wielostanowe animacje symboli (idle/hit/destroy).
+**Zależności:** ART_BIBLE §11–12. **Szac.:** 3–4 tyg.
 
 ### M6 — Integracja RGS + zgodność ⬜
 Podpięcie do realnego RGS, resume rundy, jurisdiction flags, lokalizacja (16 języków),
