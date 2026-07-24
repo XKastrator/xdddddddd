@@ -1,21 +1,35 @@
 /**
- * SymbolSprite — one board cell rendered with PixiJS Graphics (placeholder art).
- * Final spritesheets/Spine can replace the draw() internals behind this same API.
+ * SymbolSprite — one board cell.
+ *
+ * Renders the authored atlas artwork when assets are loaded; if the atlas is
+ * missing it falls back to the procedural Graphics shapes, so the game still
+ * runs (and stays testable) without any binary assets present.
  */
-import { Container, Graphics, Text } from 'pixi.js';
+import { Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 import { Sym } from '../types/events';
 import { symStyle } from './palette';
+
+export type TextureProvider = (sym: Sym) => Texture | undefined;
+
+/** How much of the cell the authored artwork occupies (glow needs headroom). */
+const ART_FILL = 1.16;
 
 export class SymbolSprite extends Container {
   private glow = new Graphics();
   private tile = new Graphics();
+  private art = new Sprite();
   private txt: Text;
   private size: number;
   sym: Sym = Sym.EMPTY;
 
-  constructor(size: number) {
+  constructor(size: number, private getTexture?: TextureProvider) {
     super();
     this.size = size;
+    this.art.anchor.set(0.5);
+    this.art.position.set(size / 2, size / 2);
+    // the authored art sits inside a padded 256 box, so oversize slightly to
+    // make symbols fill the cell without clipping their glow
+    this.art.width = this.art.height = size * ART_FILL;
     this.txt = new Text({
       text: '',
       style: { fill: 0x0a0806, fontFamily: 'system-ui, sans-serif',
@@ -23,12 +37,30 @@ export class SymbolSprite extends Container {
     });
     this.txt.anchor.set(0.5);
     this.txt.position.set(size / 2, size / 2);
-    this.addChild(this.glow, this.tile, this.txt);
+    this.addChild(this.glow, this.tile, this.art, this.txt);
     this.setSymbol(Sym.EMPTY);
   }
 
   setSymbol(sym: Sym): void {
     this.sym = sym;
+    const tex = sym === Sym.EMPTY ? undefined : this.getTexture?.(sym);
+    if (tex) { this.drawFromAtlas(tex); return; }
+    this.drawProcedural(sym);
+  }
+
+  /** Preferred path: authored artwork from the texture atlas. */
+  private drawFromAtlas(tex: Texture): void {
+    this.glow.clear();
+    this.tile.clear();
+    this.txt.text = '';
+    this.art.visible = true;
+    this.art.texture = tex;
+    this.art.width = this.art.height = this.size * ART_FILL;
+  }
+
+  /** Fallback: procedural shapes (no binary assets required). */
+  private drawProcedural(sym: Sym): void {
+    this.art.visible = false;
     const s = this.size;
     const st = symStyle(sym);
     const pad = Math.round(s * 0.06);
@@ -45,7 +77,6 @@ export class SymbolSprite extends Container {
     this.tile.roundRect(pad, pad, s - pad * 2, s - pad * 2, r).fill({ color: st.fill });
     this.tile.roundRect(pad, pad, s - pad * 2, s - pad * 2, r)
       .stroke({ width: Math.max(1, s * 0.03), color: st.ring, alpha: st.ore ? 0.6 : 0.9 });
-    // a subtle top highlight for relics
     if (!st.ore) {
       this.tile.roundRect(pad + s * 0.08, pad + s * 0.08, s - pad * 2 - s * 0.16, s * 0.18, r * 0.6)
         .fill({ color: 0xffffff, alpha: 0.12 });

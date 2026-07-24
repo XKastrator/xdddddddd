@@ -10,6 +10,7 @@ import { Application } from 'pixi.js';
 import { BookPlayer } from './game/BookPlayer';
 import { PixiPresenter } from './render/PixiPresenter';
 import { MockRgs } from './dev/MockRgs';
+import { AssetLoader } from './assets/AssetLoader';
 import { AudioManager } from './audio/AudioManager';
 import { WebAudioBackend } from './audio/WebAudioBackend';
 import { HelpScreen } from './ui/HelpScreen';
@@ -26,7 +27,7 @@ async function main(): Promise<void> {
   setLang(params.lang);
 
   const loading = new LoadingScreen();
-  loading.set(0.1);
+  loading.set(0.04);
 
   const host = document.getElementById('stage') as HTMLDivElement;
   const app = new Application();
@@ -35,15 +36,19 @@ async function main(): Promise<void> {
     resolution: Math.min(2, window.devicePixelRatio || 1), autoDensity: true,
   });
   host.appendChild(app.canvas);
-  loading.set(0.5);
+  loading.set(0.1);
 
-  const backend = new WebAudioBackend();
+  // preload the texture atlas + audio; progress is real, not a timer
+  const assets = new AssetLoader();
+  await assets.load('assets/', (p) => loading.set(0.1 + p * 0.8));
+
+  const backend = new WebAudioBackend((id) => assets.audioBuffer(id));
   const audio = new AudioManager(backend);
-  const presenter = new PixiPresenter(app, audio);
+  const presenter = new PixiPresenter(app, audio, (sym) => assets.texture(sym));
 
   const rgs = new MockRgs();
   const auth = await rgs.authenticate();
-  loading.set(0.85);
+  loading.set(0.95);
 
   const help = new HelpScreen();
   const buyPanel = new BuyPanel();

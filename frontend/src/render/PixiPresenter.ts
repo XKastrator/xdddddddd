@@ -1,7 +1,8 @@
 /**
  * PixiPresenter — production renderer implementing the Presenter contract on top
  * of PixiJS v8. Consumes the event stream from BookPlayer and animates it. Holds
- * NO game maths. Placeholder procedural art (see ART_BIBLE.md) plugs out later.
+ * NO game maths. Symbol artwork comes from the texture atlas (see ART_BIBLE.md);
+ * a procedural fallback keeps the game runnable without binary assets.
  */
 import { Application, Container, Graphics, Text } from 'pixi.js';
 import type { Presenter } from '../game/Presenter';
@@ -15,6 +16,7 @@ import { THEME } from './palette';
 import { wait } from './tween';
 import { Particles } from './Particles';
 import type { AudioManager } from '../audio/AudioManager';
+import type { TextureProvider } from './SymbolSprite';
 
 const COLS = 6, ROWS = 5, BASE_CELL = 96, BASE_GAP = 8;
 const HEAT_CAP: Record<SpinKind, number> = { base: 25, free: 100, super: 10 };
@@ -33,8 +35,9 @@ export class PixiPresenter implements Presenter {
   skip = false;
   reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  constructor(app: Application, private audio?: AudioManager) {
-    this.board = new BoardView(COLS, ROWS, BASE_CELL, BASE_GAP);
+  constructor(app: Application, private audio?: AudioManager,
+              getTexture?: TextureProvider) {
+    this.board = new BoardView(COLS, ROWS, BASE_CELL, BASE_GAP, getTexture);
     this.heatMeter = new HeatMeter(this.board.width2);
     this.heatMeter.position.set(0, -30);
     this.world.addChild(this.heatMeter, this.board, this.fx);
@@ -95,13 +98,14 @@ export class PixiPresenter implements Presenter {
 
   async anticipation(scatters: number, needed: number): Promise<void> {
     this.lblSpinWin.text = `CINDERS ${scatters}/${needed}…`;
-    this.audio?.stinger('win', 'sfx_anticipation');
+    this.audio?.stinger('win', 'sfx_cinder');
     await wait(this.reduced ? 40 : 300, () => this.skip, this.reduced);
   }
 
   async forge(fusions: Fusion[], heat: number): Promise<void> {
     this.fx.enabled = !this.reduced;
-    this.audio?.stinger('forge', 'sfx_forge');
+    const big = fusions.some((f) => f.cells.length >= 7);
+    this.audio?.stinger('forge', big ? 'sfx_forge_big' : 'sfx_forge');
     await this.board.forge(fusions, this.ctx);
     // sparks at each forged relic; bigger jumps throw more embers
     for (const f of fusions) {
@@ -138,6 +142,7 @@ export class PixiPresenter implements Presenter {
   }
 
   async retrigger(added: number, _spins: number): Promise<void> {
+    this.audio?.stinger('bonus', 'sfx_retrigger');
     await this.banner.show('RETRIGGER', added, this.ctx);
   }
 
@@ -153,7 +158,7 @@ export class PixiPresenter implements Presenter {
 
   async pour(vault: number, _heat: number, win: number): Promise<void> {
     this.lblVault.text = `VAULT ${vault.toFixed(2)}×`;
-    this.audio?.stinger('super', 'sfx_pour');
+    this.audio?.stinger('super', 'sting_pour');
     // lava spills across the whole grid at the culmination
     this.fx.enabled = !this.reduced;
     for (let c = 0; c < COLS; c++) {
@@ -166,7 +171,7 @@ export class PixiPresenter implements Presenter {
   async totalWin(totalWin: number): Promise<void> { this.lblTotal.text = `TOTAL ${totalWin.toFixed(2)}×`; }
 
   async maxWin(): Promise<void> {
-    this.audio?.stinger('maxwin', 'sfx_maxwin');
+    this.audio?.stinger('maxwin', 'sting_maxwin');
     this.fx.enabled = !this.reduced;
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c += 2) {
@@ -179,7 +184,10 @@ export class PixiPresenter implements Presenter {
 
   async finalWin(amount: number): Promise<void> {
     this.lblTotal.text = `TOTAL ${amount.toFixed(2)}×`;
-    if (amount >= 20) await this.banner.show(tierName(amount), amount, this.ctx);
+    if (amount >= 20) {
+      this.audio?.stinger('bigwin', 'sting_bigwin');
+      await this.banner.show(tierName(amount), amount, this.ctx);
+    }
   }
 
   async roundEnd(): Promise<void> { /* app re-enables the spin button */ }

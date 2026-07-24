@@ -6,7 +6,7 @@
 import { Container, Graphics } from 'pixi.js';
 import type { Board, Fusion, Spawned } from '../types/events';
 import { Sym } from '../types/events';
-import { SymbolSprite } from './SymbolSprite';
+import { SymbolSprite, type TextureProvider } from './SymbolSprite';
 import { tween, easeOutBack, easeOutCubic } from './tween';
 import { THEME } from './palette';
 
@@ -20,7 +20,8 @@ export class BoardView extends Container {
   private cells: SymbolSprite[] = [];
   private bg = new Graphics();
 
-  constructor(cols: number, rows: number, cell: number, gap: number) {
+  constructor(cols: number, rows: number, cell: number, gap: number,
+              getTexture?: TextureProvider) {
     super();
     this.cols = cols; this.rows = rows; this.cell = cell; this.gap = gap;
     const w = cols * cell + (cols + 1) * gap;
@@ -30,7 +31,7 @@ export class BoardView extends Container {
     this.addChild(this.bg);
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        const sp = new SymbolSprite(cell);
+        const sp = new SymbolSprite(cell, getTexture);
         sp.position.set(gap + c * (cell + gap), gap + r * (cell + gap));
         this.cells.push(sp);
         this.addChild(sp);

@@ -6,14 +6,28 @@
 import { Overlay } from './Overlay';
 import { t } from '../i18n/strings';
 import { LADDER, MODES, RTP, MAX_WIN, FUSE_THRESHOLD, JUMP_STEP } from '../game/gameInfo';
-import { symStyle } from '../render/palette';
+import { Sym } from '../types/events';
 
-function hex(n: number): string { return '#' + n.toString(16).padStart(6, '0'); }
+/** Atlas frame name per symbol — the help screen shows the real artwork. */
+const FRAME: Partial<Record<Sym, string>> = {
+  [Sym.O1]: 'O1', [Sym.BRONZE]: 'BRONZE', [Sym.IRON]: 'IRON', [Sym.SILVER]: 'SILVER',
+  [Sym.GOLD]: 'GOLD', [Sym.MYTHRIL]: 'MYTHRIL', [Sym.CROWN]: 'CROWN',
+  [Sym.FLUX]: 'FLUX', [Sym.CINDER]: 'CINDER',
+};
+const ATLAS_CELL = 256, ATLAS_COLS = 4;
+const ORDER = ['O1', 'O2', 'O3', 'O4', 'O5', 'BRONZE', 'IRON', 'SILVER',
+  'GOLD', 'MYTHRIL', 'CROWN', 'FLUX', 'CINDER'];
 
-function swatch(sym: number): string {
-  const st = symStyle(sym);
-  return `<span class="swatch" style="background:${hex(st.fill)};border-color:${hex(st.ring)};
-    color:${st.ore ? '#9c8358' : '#120a04'}">${st.label}</span>`;
+/** Crop the shared atlas with background-position — one request, no extra art. */
+function swatch(sym: Sym): string {
+  const name = FRAME[sym];
+  const i = name ? ORDER.indexOf(name) : -1;
+  if (i < 0) return '<span class="swatch"></span>';
+  const x = (i % ATLAS_COLS) * ATLAS_CELL, y = Math.floor(i / ATLAS_COLS) * ATLAS_CELL;
+  const scale = 34 / ATLAS_CELL;
+  return `<span class="swatch" style="background-image:url(assets/atlas.png);
+    background-size:${ATLAS_COLS * ATLAS_CELL * scale}px auto;
+    background-position:-${x * scale}px -${y * scale}px"></span>`;
 }
 
 export class HelpScreen extends Overlay {
@@ -59,8 +73,8 @@ export class HelpScreen extends Overlay {
 
       <h3>${t('help.special')}</h3>
       <ul>
-        <li>${swatch(12)} <b>${t('sym.flux')}</b> — ${t('help.flux')}</li>
-        <li>${swatch(13)} <b>${t('sym.cinder')}</b> — ${t('help.cinder')}</li>
+        <li>${swatch(Sym.FLUX)} <b>${t('sym.flux')}</b> — ${t('help.flux')}</li>
+        <li>${swatch(Sym.CINDER)} <b>${t('sym.cinder')}</b> — ${t('help.cinder')}</li>
       </ul>
 
       <h3>${t('help.bonus')}</h3>

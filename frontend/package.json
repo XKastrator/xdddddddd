@@ -2,7 +2,7 @@
   "name": "molten-crown-frontend",
   "version": "0.1.0",
   "private": true,
-  "description": "Molten Crown — Stake Engine frontend (event-driven, TypeScript). RGS client, event contract, book player.",
+  "description": "Molten Crown \u2014 Stake Engine frontend (event-driven, TypeScript). RGS client, event contract, book player.",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,7 +10,9 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "devbooks": "python3 src/dev/make_devbooks.py",
-    "player": "python3 player/build_player.py && echo 'open frontend/player/index.html'"
+    "player": "python3 player/build_player.py && echo 'open frontend/player/index.html'",
+    "assets": "python3 ../assets/generate_art.py && node ../assets/rasterize.mjs && python3 ../assets/generate_audio.py",
+    "test": "node tests/smoke.mjs"
   },
   "devDependencies": {
     "playwright": "^1.61.1",

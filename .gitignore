@@ -9,6 +9,9 @@ node_modules/
 frontend/dist/
 *.tsbuildinfo
 
+# Asset build intermediates (regenerate with `npm run assets`)
+assets/build/
+
 # Test artifacts (regenerate with `node tests/smoke.mjs`)
 frontend/tests/shots/
 
