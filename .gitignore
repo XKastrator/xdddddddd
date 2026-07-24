@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+
+# Node / TypeScript
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# OS / editor
+.DS_Store
+*.swp
+
+# Scratch
+/tmp/
