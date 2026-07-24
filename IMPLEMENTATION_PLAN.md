@@ -21,7 +21,8 @@
 | Art bible + prompty | ✅ `ART_BIBLE.md` |
 | **Produkcyjny renderer PixiJS** | ✅ `frontend/src/render/` — działa w przeglądarce, 36/36 checków |
 | Assety: symbole + audio | ✅ atlas 13 symboli + 14 OGG (pipeline w `assets/`) |
-| Assety: tła, postać, Spine | ⬜ (prompty w ART_BIBLE §11) |
+| Assety: tła, postać + rig animacji | ✅ 3 sceny, Emberwright (4 części + kości), lobby tile |
+| Ilustracja malowana / pliki Spine | ⬜ (brak licencji Spine; ART_BIBLE §11, §13) |
 | Symulacja 1M/mode | 🟡 (100k+ zrobione; skala do zwiększenia) |
 
 ---
@@ -59,9 +60,11 @@ role=dialog, Escape, focus restore), `LoadingScreen` (realny progres),
 ✅ **Zrobione:** 13 symboli jako autorski wektor → atlas tekstur (jedna tekstura,
 339 kB), 14 plików audio OGG (pady base/bonus/super + SFX + stingery, 338 kB),
 pipeline odtwarzalny (`npm run assets`), preload z realnym progresem.
-⬜ **Pozostaje (artysta):** tła (4 sceny), postać Emberwrighta, animacje Spine,
-rozbudowane cząstki, lobby tile, wielostanowe animacje symboli (idle/hit/destroy).
-**Zależności:** ART_BIBLE §11–12. **Szac.:** 3–4 tyg.
+✅ **Dodatkowo:** 3 tła scen (base/bonus/super) z cross‑fade, lobby tile,
+Emberwright jako rig 4 części + animacja kośćmi (idle/strike/cheer).
+⬜ **Pozostaje (artysta):** malowana ilustracja wyższego detalu, rig w Spine
+(jeśli studio ma licencję — mapowanie 1:1 w ART_BIBLE §13), wielostanowe animacje
+symboli (idle/hit/destroy), rozbudowane cząstki. **Szac.:** 2–3 tyg.
 
 ### M6 — Integracja RGS + zgodność ⬜
 Podpięcie do realnego RGS, resume rundy, jurisdiction flags, lokalizacja (16 języków),

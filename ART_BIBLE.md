@@ -9,9 +9,14 @@
 >   `frontend/public/assets/audio/*.ogg`. Generowane skryptami z `assets/`.
 >   Art to **autorska grafika wektorowa** (gradienty, fazowania, emisyjne rimy),
 >   audio to **synteza numpy** (rezonatory metalu, bezszwowe pady) — nie sample.
-> - ⬜ **Nie są to assety rysowane ręcznie przez artystę 2D ani animacje Spine.**
->   Tła, postać Emberwrighta, animacje szkieletowe i pełna oprawa cząstek pozostają
->   pracą dla artysty — prompty produkcyjne w §11.
+> - ✅ **Tła (3 sceny), lobby tile i postać Emberwrighta również istnieją** —
+>   `scene_{base,bonus,super}.jpg`, `lobby.jpg`, `character.png` (4 części rigu).
+>   Postać jest animowana **kośćmi** (idle / uderzenie młotem / triumf) przez
+>   `src/render/Rig.ts`.
+> - ⬜ **Nie są to assety rysowane ręcznie przez artystę 2D, ani pliki Spine.**
+>   Nie mam licencji ani edytora Spine (patrz §13), więc zamiast podrabiać pliki
+>   `.skel` zaimplementowałem równoważny system kości. Ilustracja o wyższym
+>   detalu (malowane tła, portret postaci) pozostaje pracą dla artysty — prompty w §11.
 > Placeholdery nie są przedstawiane jako finalna oprawa: poniżej jasno rozdzielono,
 > co jest wygenerowane, a co wymaga artysty.
 
@@ -98,11 +103,13 @@ Każdy tier: dłuższy count‑up, mocniejszy stinger, kolejna warstwa muzyki, k
 
 **Symbole (spritesheets/Spine):** 5 wariantów rudy, Bronze, Iron, Silver, Gold,
 Mythril, Crown, Flux, Cinder — każdy: idle, hit/forge, destroy. (≈13 symboli × 3 stany).
-**Tła:** base kuźnia, Forge Fury (rozgrzana), Molten Core (rdzeń), loading.
+**Tła:** ✅ base kuźnia, Forge Fury (rozgrzana), Molten Core (rdzeń) — wygenerowane;
+loading screen jest CSS‑owy.
 **UI:** ramka planszy, HUD (bet, balance, win, spins), pasek Heat, panel Buy (×2),
 przyciski spin/turbo/skip/menu/info, ikony accessibility.
 **Particles:** iskry forge, żar idle, snop przy big win, wylew Pour, cząstki Heat.
-**Spine (opcjonalnie):** Emberwright (przewodnik), kadź Pour, korona max‑win.
+**Postać:** Emberwright — ✅ 4 części rigu + animacja kośćmi (§13). Do rozbudowy:
+kadź Pour, korona max‑win jako osobne rigi.
 **Audio (patrz §10).**
 
 ## 10. Audio — warstwy, ducking, priorytety
@@ -145,9 +152,11 @@ cd frontend && npm run assets     # art + atlas + audio, jednym poleceniem
 ```
 Równoważnie:
 ```bash
-python3 assets/generate_art.py    # autorskie SVG -> assets/build/atlas.html + atlas.json
-node    assets/rasterize.mjs      # rasteryzacja (headless Chromium) -> atlas.png
-python3 assets/generate_audio.py  # synteza numpy -> *.ogg (OGG Vorbis)
+python3 assets/generate_art.py       # symbole   -> atlas.html + atlas.json
+python3 assets/generate_scenes.py    # tła + lobby tile
+python3 assets/generate_character.py # części rigu Emberwrighta
+node    assets/rasterize.mjs         # rasteryzacja (headless Chromium) -> PNG/JPEG
+python3 assets/generate_audio.py     # synteza numpy -> *.ogg (OGG Vorbis)
 ```
 
 ### Co powstaje
@@ -156,11 +165,15 @@ python3 assets/generate_audio.py  # synteza numpy -> *.ogg (OGG Vorbis)
 |---|---|---|
 | `frontend/public/assets/atlas.png` | 13 symboli w siatce 4×4 po 256 px | ~339 kB |
 | `frontend/public/assets/atlas.json` | ramki (x, y, w, h) per symbol | ~1 kB |
+| `scene_base.jpg` / `scene_bonus.jpg` / `scene_super.jpg` | tła 3 stanów rundy, 1024×1024 | 26 / 35 / 38 kB |
+| `lobby.jpg` | lobby tile 512×512 | 17 kB |
+| `character.png` + `character.json` | 4 części rigu Emberwrighta + pivoty | ~94 kB |
 | `frontend/public/assets/audio/bed_{base,bonus,super}.ogg` | bezszwowe pady 8 s | ~63 kB każdy |
 | `.../sfx_{spin,forge,forge_big,heat,cinder,retrigger}.ogg` | SFX | 4–13 kB |
 | `.../sting_{bonus,super,pour,bigwin,maxwin}.ogg` | stingery | 16–29 kB |
 
-**Razem audio: 338 kB** (14 plików). Jedna tekstura = niskie draw calls na mobile.
+**Razem: obrazy ~549 kB + audio 338 kB.** Jedna tekstura symboli = niskie draw calls;
+tła jako JPEG (brak potrzeby alfy) są ~10× lżejsze niż PNG.
 
 ### Zasady utrzymane w generatorze
 - **Ruda nie ma numerału** (wszystkie warianty to ranga 0) — numerał sugerowałby
@@ -179,3 +192,30 @@ atlas o tych samych nazwach ramek (`O1..O5, BRONZE, IRON, SILVER, GOLD, MYTHRIL,
 CROWN, FLUX, CINDER`) — kod renderera nie wymaga zmian. Analogicznie audio:
 te same nazwy plików `.ogg`. Jeśli atlas zniknie, `SymbolSprite` automatycznie
 wraca do kształtów proceduralnych (gra nadal działa i jest testowalna).
+
+
+---
+
+## 13. Animacja postaci — dlaczego nie Spine (i co jest zamiast)
+
+**Spine (Esoteric Software) to płatny edytor + runtime.** W tym środowisku nie ma
+ani licencji, ani edytora, więc **nie wygenerowałem plików `.skel`/Spine‑JSON** —
+podrobione pliki Spine byłyby nieuczciwe i i tak nie otworzyłyby się w edytorze.
+
+Zamiast tego `src/render/Rig.ts` implementuje **tę samą ideę wprost**:
+
+| Pojęcie Spine | Odpowiednik w `Rig.ts` |
+|---|---|
+| bone hierarchy | `EMBERWRIGHT_BONES` (`root → body → head/armBack/armFront`) |
+| slot/attachment | tekstura części z atlasu + pivot z `character.json` |
+| animation clip | `CLIPS` — keyframe'y `rot` / `x` / `y` per kość |
+| setup pose | `rotation` w definicji kości |
+| mixing / next anim | klip nie‑loopowany wraca do `idle` |
+
+**Klipy:** `idle` (oddech, kołysanie), `strike` (zamach + ciężkie uderzenie —
+odpalane przy każdym `forge`), `cheer` (obie ręce w górę — przy Big Win).
+
+**Migracja do Spine (gdy studio ma licencję):** nazwy kości i pivoty są 1:1 z
+tym, co wyeksportowałby rig Spine — wystarczy podmienić `Rig.ts` na
+`spine-pixi` i wczytać skeleton. Reszta renderera się nie zmienia, bo
+`PixiPresenter` woła tylko `rig.play('strike' | 'cheer' | 'idle')`.

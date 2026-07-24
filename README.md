@@ -44,7 +44,8 @@ frontend/      Frontend (TypeScript, event-driven, PixiJS)
   src/audio/   AudioManager + WebAudioBackend (syntezowane placeholdery)
   src/assets/  AssetLoader (preload atlasu + audio)
   src/dev/     MockRgs + devBooks.json (fixture z realnych książek, tylko DEV)
-  public/assets/  atlas.png + atlas.json + audio/*.ogg (wygenerowane)
+  src/render/Rig.ts   animacja kośćmi postaci (odpowiednik Spine, patrz ART_BIBLE §13)
+  public/assets/  atlas.png, scene_*.jpg, character.png, lobby.jpg, audio/*.ogg
 assets/        Pipeline assetów: generate_art.py, rasterize.mjs, generate_audio.py
   tests/       smoke.mjs — test przeglądarkowy (Playwright)
   player/      self-contained replay harness (index.html) — otwórz w przeglądarce
@@ -97,7 +98,7 @@ python3 tests/test_maxwin.py
 cd frontend
 npm install            # pixi.js, typescript, vite, playwright
 npm run devbooks       # (raz) fixture realnych książek dla MockRGS
-npm run assets         # (opcjonalnie) regeneracja atlasu grafik + audio OGG
+npm run assets         # (opcjonalnie) regeneracja: symbole, tła, postać, lobby, audio
 npm run dev            # http://localhost:5173  — grywalna gra w przeglądarce
 npm run typecheck      # tsc --noEmit (czyste)
 npm run build          # typecheck + vite build -> dist/
@@ -128,7 +129,8 @@ cd frontend && npm run build   # tsc --noEmit + vite build -> dist/
 ```
 Rozmiary bundli: gra **38.8 kB** (14.1 kB gzip), pixi 551 kB (161 kB gzip) w osobnym
 chunku, fixture DEV ładowany leniwie (nie trafia do bundla gry).
-Assety: atlas **339 kB** (jedna tekstura) + audio **338 kB** (14 plików OGG).
+Assety: obrazy **~549 kB** (atlas symboli 339 kB + 3 tła JPEG + postać + lobby tile)
+oraz audio **338 kB** (14 plików OGG).
 
 ---
 
@@ -147,9 +149,10 @@ Max win **15,000×**. Szczegóły: `PAR_REPORT.md`.
 Warstwa matematyczna, kontrakt eventów **oraz renderer PixiJS** są **uruchamialne i
 przetestowane** w tym środowisku (36/36 checków przeglądarkowych: mobile, desktop,
 locale pl, panel Buy, help screen).
-Grafika symboli i audio istnieją jako **realne pliki assetów** (autorski wektor →
-atlas tekstur; synteza numpy → OGG) — patrz `ART_BIBLE.md` §12. Assety rysowane
-ręcznie przez artystę 2D, tła i animacje Spine, skala symulacji 1M/mode oraz testy
+Grafika (symbole, 3 tła, postać, lobby tile) i audio istnieją jako **realne pliki
+assetów** (autorski wektor → atlas/JPEG; synteza numpy → OGG), a postać jest
+animowana kośćmi — patrz `ART_BIBLE.md` §12–13. Ilustracja malowana przez artystę 2D
+i pliki Spine (brak licencji w tym środowisku), skala symulacji 1M/mode oraz testy
 E2E z realnym RGS to jasno oznaczone kolejne kroki
 (`IMPLEMENTATION_PLAN.md`, `QA_REPORT.md`). Nic nie jest deklarowane jako
 „zrobione”, jeśli nie zostało faktycznie uruchomione.
