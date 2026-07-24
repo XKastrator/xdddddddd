@@ -36,8 +36,11 @@ math/          Silnik matematyczny (Python) + testy + publish_files
   tests/       test_forge / test_events_schema / test_rtp / test_maxwin
   publish_files/  index.json + lookUpTable_*.csv + books_*.jsonl.zst  (wygenerowane)
   forced/         katalog 16 reprodukowalnych scenariuszy (po `run`)
-frontend/      Frontend (TypeScript, event-driven)
+frontend/      Frontend (TypeScript, event-driven, PixiJS)
   src/         types/events, rgs/RgsClient, game/BookPlayer, game/Presenter, audio, main
+  src/render/  PixiPresenter + BoardView/HeatMeter/WinBanner/Layout/tween (renderer)
+  src/dev/     MockRgs + devBooks.json (fixture z realnych książek, tylko DEV)
+  tests/       smoke.mjs — test przeglądarkowy (Playwright)
   player/      self-contained replay harness (index.html) — otwórz w przeglądarce
 ```
 
@@ -83,12 +86,21 @@ python3 tests/test_maxwin.py
 # (jeśli zainstalowany pytest: `pytest tests/` również działa)
 ```
 
-### 6. Frontend — type‑check
+### 6. Frontend — uruchomienie gry (renderer PixiJS)
 ```bash
 cd frontend
-npm install          # typescript (devDependency)
-npm run typecheck    # tsc --noEmit  (powinno być czyste)
+npm install            # pixi.js, typescript, vite, playwright
+npm run devbooks       # (raz) fixture realnych książek dla MockRGS
+npm run dev            # http://localhost:5173  — grywalna gra w przeglądarce
+npm run typecheck      # tsc --noEmit (czyste)
+npm run build          # typecheck + vite build -> dist/
+node tests/smoke.mjs   # test przeglądarkowy: spin base/bonus/super, mobile+desktop
 ```
+Gra działa w pełni: SPIN, wybór trybu (Base / Stoked / Buy Forge Fury / Buy Molten Core),
+poziom zakładu, SKIP, TURBO, reduced motion, klawiatura (spacja = spin, `s` = skip).
+Tryb DEV używa `MockRgs`, który serwuje **realne książki** próbkowane wagami z
+opublikowanej biblioteki — rozkład jest wierny. Produkcja: podmiana na `RgsClient`
+(patrz `src/main.ts`).
 
 ### 7. Frontend — działający replay harness (bez build‑stepu)
 ```bash
@@ -101,8 +113,10 @@ dowód, że **kontrakt eventów jest kompletny** i frontend potrafi odtworzyć k
 
 ### 8. Build produkcyjny (frontend)
 ```bash
-cd frontend && npm run build   # tsc -> dist/ (renderer PixiJS/Svelte = milestone M3)
+cd frontend && npm run build   # tsc --noEmit + vite build -> dist/
 ```
+Rozmiary bundli: gra **15 kB** (5.6 kB gzip), pixi 512 kB (148 kB gzip) w osobnym
+chunku, fixture DEV ładowany leniwie (nie trafia do bundla gry).
 
 ---
 
@@ -118,8 +132,9 @@ cd frontend && npm run build   # tsc -> dist/ (renderer PixiJS/Svelte = mileston
 Max win **15,000×**. Szczegóły: `PAR_REPORT.md`.
 
 ## Uwaga o statusie
-Warstwa matematyczna i kontrakt są **uruchamialne i przetestowane** w tym środowisku.
-Produkcyjny renderer PixiJS/Svelte, finalne assety/audio, skala symulacji 1M/mode
-oraz testy E2E z RGS to jasno oznaczone kolejne kroki (`IMPLEMENTATION_PLAN.md`,
-`QA_REPORT.md`). Nic nie jest deklarowane jako „zrobione”, jeśli nie zostało
-faktycznie uruchomione.
+Warstwa matematyczna, kontrakt eventów **oraz renderer PixiJS** są **uruchamialne i
+przetestowane** w tym środowisku (12/12 checków przeglądarkowych, mobile + desktop).
+Finalne assety/audio (obecnie proceduralne placeholdery), skala symulacji 1M/mode
+oraz testy E2E z realnym RGS to jasno oznaczone kolejne kroki
+(`IMPLEMENTATION_PLAN.md`, `QA_REPORT.md`). Nic nie jest deklarowane jako
+„zrobione”, jeśli nie zostało faktycznie uruchomione.

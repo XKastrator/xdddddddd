@@ -14,7 +14,9 @@
 | RTP / optymalizator | `math/tests/test_rtp.py` | optymalizator trafia RTP (int‑wagi), payout==eventy, pasma RTP | ✅ pass |
 | Max win / stateless | `math/tests/test_maxwin.py` | brak przekroczenia capu, forced cap==15000×, brak progresji między zakładami | ✅ pass |
 | Frontend typecheck | `frontend` `tsc --noEmit` | ścisłe typy TS | ✅ clean |
+| Frontend build | `vite build` | bundle produkcyjny | ✅ gra 15 kB / 5.6 kB gzip |
 | Player JS | `node --check` | składnia harnessu | ✅ ok |
+| **Renderer w przeglądarce** | `frontend/tests/smoke.mjs` (Playwright/Chromium) | ładowanie, canvas, spin base/bonus/super, bilans, brak błędów — mobile 390×844 + desktop 1280×800 | ✅ **12/12** |
 
 **Symulacja (walidacja math):** 4 tryby, publish files wygenerowane, RTP=0.9650
 exact, buckety/feature/P(max) w `PAR_REPORT.md`. ✅
@@ -41,10 +43,10 @@ exact, buckety/feature/P(max) w `PAR_REPORT.md`. ✅
 | różne wartości bet | ✅ (logika) | payout skalowany multiplikatorem; `betLevels`/`stepBet` |
 | lokalizacja | 🟡 | UI localization‑ready (16 języków RGS); pliki i18n do uzupełnienia |
 | overflow / precision | ✅ | payout int (×100), klamp capu; brak float w RGS |
-| mobile layouts | 🟡 | harness responsywny (portrait); pełne layouty w M3 |
-| audio mute | ✅ (logika) | `AudioManager.setMuted` |
-| turbo / skip | ✅ | `BookPlayer.skip`, harness turbo; gating `disabledTurbo` |
-| reduced motion | ✅ | harness respektuje `prefers-reduced-motion` |
+| mobile layouts | ✅ | `Layout.ts` mobile‑first; zweryfikowane w przeglądarce 390×844 i 1280×800 |
+| audio mute | 🟡 (logika) | `AudioManager.setMuted`; podpięcie WebAudio w M3+ |
+| turbo / skip | ✅ | `BookPlayer.skip` + `PixiPresenter.skip`; gating `disabledTurbo` (MockRgs zwraca flagi) |
+| reduced motion | ✅ | `tween` respektuje `prefers-reduced-motion` + przełącznik w UI |
 | błędne odpowiedzi RGS | 🟡 | mapowanie kodów gotowe; test E2E wymaga RGS mock |
 
 ---
@@ -65,9 +67,10 @@ super_big=2098×, maxwin_*=15000×.
 
 1. 🟡 **Skala symulacji** — obecnie 100k+/mode (pub+val). Do publikacji zalecane
    1M+/mode (percentyle tail 1k–10k dla base/ante, trajektorie bankrolla).
-2. ⬜ **Produkcyjny renderer** — obecny frontend to vertical slice (DOM harness) +
-   architektura TS; PixiJS/Svelte renderer (M3) do zbudowania.
-3. ⬜ **Assety/audio** — placeholdery; finalne wg `ART_BIBLE.md`.
+2. 🟡 **Renderer** — rdzeń PixiJS działa i jest przetestowany w przeglądarce.
+   Pozostaje: panel Buy z potwierdzeniem, help/paytable screen, loading+preload,
+   podpięcie audio do WebAudio, cząstki/Spine.
+3. ⬜ **Assety/audio** — proceduralne placeholdery; finalne wg `ART_BIBLE.md`.
 4. 🟡 **Testy E2E z RGS** — wymagają mocka RGS (resume, saldo, błędy) — do dodania.
 5. 🟡 **Property‑based** — dodać testy typu Hypothesis (niezmienniki fuzji na losowych planszach).
 6. `books_bonus.jsonl.zst` ~17.5 MB — akceptowalne, ale przy 1M/mode rozważyć podział.

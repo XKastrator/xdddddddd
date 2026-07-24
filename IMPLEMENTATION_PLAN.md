@@ -19,8 +19,8 @@
 | Runnable replay harness | ✅ `frontend/player/index.html` |
 | Testy (math) | ✅ `math/tests/` |
 | Art bible + prompty | ✅ `ART_BIBLE.md` |
-| Produkcyjny renderer PixiJS/Svelte | ⬜ (Presenter zaimplementowany jako DOM slice) |
-| Finalne assety/audio | ⬜ (placeholdery + prompty) |
+| **Produkcyjny renderer PixiJS** | ✅ `frontend/src/render/` — działa w przeglądarce, 12/12 checków |
+| Finalne assety/audio | ⬜ (proceduralne placeholdery + prompty w ART_BIBLE) |
 | Symulacja 1M/mode | 🟡 (100k+ zrobione; skala do zwiększenia) |
 
 ---
@@ -35,10 +35,15 @@ publish files, testy, PAR. **Zależności:** brak. **Wynik:** RTP 0.9650 exact.
 Kontrakt eventów, RgsClient, BookPlayer, Presenter, DOM harness odtwarzający
 realne książki. **Zależności:** M1 (książki/eventy).
 
-### M3 — Produkcyjny renderer (PixiJS + Svelte) ⬜
-Implementacja `Presenter` w PixiJS; sceny base/bonus/super; HUD; Buy panel;
-loading + preload; audio wiring (WebAudio). **Zależności:** M2 (kontrakt), assety M5.
-**Priorytet:** wysoki. **Szac.:** 3–4 tyg.
+### M3 — Produkcyjny renderer (PixiJS) ✅ (DONE — rdzeń)
+Zaimplementowane: `PixiPresenter` (wszystkie 16 eventów), `BoardView` (puls fuzji,
+pop produktu, opadanie grawitacyjne), `HeatMeter`, `WinBanner` (tiery + count‑up),
+`Layout` (mobile‑first, portrait/landscape/desktop), `tween` (skip + reduced motion),
+shell DOM z dostępnymi kontrolkami, `MockRgs` (realne książki), Vite build,
+test przeglądarkowy Playwright (12/12 ✅, mobile + desktop).
+**Pozostaje w M3+:** panel Buy z potwierdzeniem, ekran pomocy/paytable, loading
+screen + preload assetów, podpięcie `AudioManager` do WebAudio, cząstki/Spine.
+**Zależności:** assety M5.
 
 ### M4 — Skala matematyki + certyfikacja ⬜/🟡
 1M+/mode, pełne bankroll MC, PAR sheet do audytu, replay‑verification vs frontend.
