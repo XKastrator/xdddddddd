@@ -33,14 +33,26 @@ export const AUDIO_IDS = [
 
 export type AudioId = typeof AUDIO_IDS[number];
 
+export interface RigMeta {
+  image: string;
+  frames: Record<string, { x: number; y: number; w: number; h: number;
+    pivot: { x: number; y: number } }>;
+}
+
+export type SceneName = 'base' | 'bonus' | 'super';
+const SCENES: SceneName[] = ['base', 'bonus', 'super'];
+
 export class AssetLoader {
   private textures = new Map<Sym, Texture>();
   private audio = new Map<string, ArrayBuffer>();
+  private scenes: Partial<Record<SceneName, Texture>> = {};
+  private parts: Record<string, { texture: Texture; pivot: { x: number; y: number } }> = {};
   loaded = false;
 
   /** `onProgress` receives 0..1 across the whole asset set. */
   async load(base = 'assets/', onProgress?: (p: number) => void): Promise<void> {
-    const steps = 1 + 1 + AUDIO_IDS.length;   // meta + atlas image + audio files
+    // meta + atlas + character + 3 scenes + audio
+    const steps = 2 + 1 + SCENES.length + AUDIO_IDS.length;
     let done = 0;
     const tick = () => onProgress?.(++done / steps);
 
@@ -58,6 +70,27 @@ export class AssetLoader {
       }));
     }
 
+    // character rig parts — optional, the game runs without the smith
+    try {
+      const rig: RigMeta = await fetch(`${base}character.json`).then((r) => r.json());
+      const rigSheet: Texture = await Assets.load(`${base}${rig.image}`);
+      for (const [name, f] of Object.entries(rig.frames)) {
+        this.parts[name] = {
+          texture: new Texture({ source: rigSheet.source,
+            frame: new Rectangle(f.x, f.y, f.w, f.h) }),
+          pivot: f.pivot,
+        };
+      }
+    } catch { /* no character art: rig simply is not shown */ }
+    tick();
+
+    // scenes — optional, Background falls back to a painted gradient
+    await Promise.all(SCENES.map(async (name) => {
+      try { this.scenes[name] = await Assets.load(`${base}scene_${name}.jpg`); }
+      catch { /* keep going */ }
+      tick();
+    }));
+
     // audio is optional: a failed fetch must never block the game from starting
     await Promise.all(AUDIO_IDS.map(async (id) => {
       try {
@@ -72,4 +105,8 @@ export class AssetLoader {
 
   texture(sym: Sym): Texture | undefined { return this.textures.get(sym); }
   audioBuffer(id: string): ArrayBuffer | undefined { return this.audio.get(id); }
+  sceneTextures(): Partial<Record<SceneName, Texture>> { return this.scenes; }
+  rigParts(): Record<string, { texture: Texture; pivot: { x: number; y: number } }> {
+    return this.parts;
+  }
 }

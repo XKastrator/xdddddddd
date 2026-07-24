@@ -44,7 +44,11 @@ async function main(): Promise<void> {
 
   const backend = new WebAudioBackend((id) => assets.audioBuffer(id));
   const audio = new AudioManager(backend);
-  const presenter = new PixiPresenter(app, audio, (sym) => assets.texture(sym));
+  const presenter = new PixiPresenter(app, audio, {
+    getTexture: (sym) => assets.texture(sym),
+    scenes: assets.sceneTextures(),
+    rigParts: assets.rigParts(),
+  });
 
   const rgs = new MockRgs();
   const auth = await rgs.authenticate();

@@ -4,7 +4,7 @@
  * NO game maths. Symbol artwork comes from the texture atlas (see ART_BIBLE.md);
  * a procedural fallback keeps the game runnable without binary assets.
  */
-import { Application, Container, Graphics, Text } from 'pixi.js';
+import { Application, Container, Text } from 'pixi.js';
 import type { Presenter } from '../game/Presenter';
 import type { Board, Fusion, Relic, Spawned, SpinKind } from '../types/events';
 import { Sym } from '../types/events';
@@ -15,15 +15,26 @@ import { computeLayout } from './Layout';
 import { THEME } from './palette';
 import { wait } from './tween';
 import { Particles } from './Particles';
+import { Background } from './Background';
+import { Rig, EMBERWRIGHT_BONES, type PartTextures } from './Rig';
 import type { AudioManager } from '../audio/AudioManager';
 import type { TextureProvider } from './SymbolSprite';
+import type { Texture } from 'pixi.js';
+
+export interface PresenterAssets {
+  getTexture?: TextureProvider;
+  scenes?: Partial<Record<'base' | 'bonus' | 'super', Texture>>;
+  rigParts?: PartTextures;
+}
 
 const COLS = 6, ROWS = 5, BASE_CELL = 96, BASE_GAP = 8;
 const HEAT_CAP: Record<SpinKind, number> = { base: 25, free: 100, super: 10 };
 
 export class PixiPresenter implements Presenter {
-  private bg = new Graphics();
+  private bg: Background;
   private world = new Container();
+  private rig: Rig | null = null;
+  private rigHolder = new Container();
   private board: BoardView;
   private heatMeter: HeatMeter;
   private banner = new WinBanner();
@@ -36,8 +47,13 @@ export class PixiPresenter implements Presenter {
   reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   constructor(app: Application, private audio?: AudioManager,
-              getTexture?: TextureProvider) {
-    this.board = new BoardView(COLS, ROWS, BASE_CELL, BASE_GAP, getTexture);
+              assets: PresenterAssets = {}) {
+    this.bg = new Background(assets.scenes ?? {});
+    this.board = new BoardView(COLS, ROWS, BASE_CELL, BASE_GAP, assets.getTexture);
+    if (assets.rigParts && Object.keys(assets.rigParts).length) {
+      this.rig = new Rig(EMBERWRIGHT_BONES, assets.rigParts);
+      this.rigHolder.addChild(this.rig);
+    }
     this.heatMeter = new HeatMeter(this.board.width2);
     this.heatMeter.position.set(0, -30);
     this.world.addChild(this.heatMeter, this.board, this.fx);
@@ -50,9 +66,18 @@ export class PixiPresenter implements Presenter {
     this.lblSpinWin = mk(15, THEME.gold); this.lblTotal = mk(20, THEME.txt, '800');
     this.hud.addChild(this.lblMode, this.lblSpins, this.lblVault, this.lblSpinWin, this.lblTotal);
 
-    app.stage.addChild(this.bg, this.world, this.hud, this.banner);
+    app.stage.addChild(this.bg, this.rigHolder, this.world, this.hud, this.banner);
     this.resize(app.renderer.width, app.renderer.height);
     this.showIdleBoard();
+
+    // one ticker drives the rig and the background drift
+    let elapsed = 0;
+    app.ticker.add((ticker) => {
+      const dt = ticker.deltaMS / 1000;
+      elapsed += dt;
+      if (!this.reduced) this.bg.drift(elapsed);
+      this.rig?.update(dt);
+    });
   }
 
   /** Fill the grid with ore before the first spin so the game never looks empty. */
@@ -68,9 +93,7 @@ export class PixiPresenter implements Presenter {
   private get ctx() { return { shouldSkip: () => this.skip, reduced: this.reduced }; }
 
   resize(w: number, h: number): void {
-    this.bg.clear();
-    this.bg.rect(0, 0, w, h).fill({ color: THEME.bg0 });
-    this.bg.roundRect(w * 0.1, -h * 0.1, w * 0.8, h * 0.5, 40).fill({ color: 0x1c130b, alpha: 0.5 });
+    this.bg.resize(w, h);
 
     const lay = computeLayout(w, h, COLS, ROWS);
     const scale = lay.cell / BASE_CELL;
@@ -84,6 +107,33 @@ export class PixiPresenter implements Presenter {
     this.lblSpins.position.set(w - pad - 160, pad * 0.7 + 22);
     this.lblVault.position.set(w - pad - 160, pad * 0.7 + 44);
     this.banner.resize(w, h);
+    this.placeRig(w, h, lay.boardX, lay.boardY, lay.boardH ?? 0);
+  }
+
+  /**
+   * The smith stands at the forge beside the board. On narrow portrait screens
+   * there is no side room, so he is tucked behind the board's lower edge instead
+   * of being squeezed on top of the grid.
+   */
+  private placeRig(w: number, h: number, boardX: number, boardY: number,
+                   boardH: number): void {
+    if (!this.rig) return;
+    // The figure is set dressing: it must never crowd the grid or be clipped.
+    // It only appears when there is genuine room beside the board.
+    const sideRoom = boardX;
+    const wide = sideRoom > w * 0.14;
+    this.rig.visible = wide;
+    if (!wide) return;
+
+    // authored figure is ~410 units tall above the hips (shoulders at -268,
+    // hood reaching ~-410); size it so the whole figure fits the side gutter
+    const RIG_HEIGHT = 430;
+    const byHeight = h * 0.34 / RIG_HEIGHT;
+    const byWidth = (sideRoom * 0.82) / 240;       // authored half-width ~120
+    this.rig.scale.set(Math.min(byHeight, byWidth));
+    // feet (hem) rest on the board's bottom line, tucked into the gutter
+    this.rig.position.set(sideRoom * 0.5, boardY + boardH * 0.86);
+    this.rig.alpha = 0.92;
   }
 
   // --- Presenter contract --------------------------------------------------
@@ -106,6 +156,7 @@ export class PixiPresenter implements Presenter {
     this.fx.enabled = !this.reduced;
     const big = fusions.some((f) => f.cells.length >= 7);
     this.audio?.stinger('forge', big ? 'sfx_forge_big' : 'sfx_forge');
+    this.rig?.play('strike');
     await this.board.forge(fusions, this.ctx);
     // sparks at each forged relic; bigger jumps throw more embers
     for (const f of fusions) {
@@ -134,6 +185,7 @@ export class PixiPresenter implements Presenter {
     if (mode === 'molten_core') this.lblVault.text = 'VAULT 0.00×';
     this.lblSpins.text = `SPINS ${spins}`;
     this.audio?.enterState(mode === 'molten_core' ? 'super' : 'bonus');
+    await this.bg.to(mode === 'molten_core' ? 'super' : 'bonus', this.ctx);
     await this.banner.show(mode === 'molten_core' ? 'SUPERBONUS' : 'BONUS', 0, this.ctx);
   }
 
@@ -186,11 +238,15 @@ export class PixiPresenter implements Presenter {
     this.lblTotal.text = `TOTAL ${amount.toFixed(2)}×`;
     if (amount >= 20) {
       this.audio?.stinger('bigwin', 'sting_bigwin');
+      this.rig?.play('cheer');
       await this.banner.show(tierName(amount), amount, this.ctx);
     }
   }
 
-  async roundEnd(): Promise<void> { /* app re-enables the spin button */ }
+  async roundEnd(): Promise<void> {
+    // the round is over: the forge cools back to its resting scene
+    await this.bg.to('base', this.ctx);
+  }
 
   setMode(name: string): void { this.lblMode.text = name.toUpperCase(); }
 }

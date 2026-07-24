@@ -11,7 +11,7 @@
     "preview": "vite preview",
     "devbooks": "python3 src/dev/make_devbooks.py",
     "player": "python3 player/build_player.py && echo 'open frontend/player/index.html'",
-    "assets": "python3 ../assets/generate_art.py && node ../assets/rasterize.mjs && python3 ../assets/generate_audio.py",
+    "assets": "python3 ../assets/generate_art.py && python3 ../assets/generate_scenes.py && python3 ../assets/generate_character.py && node ../assets/rasterize.mjs && python3 ../assets/generate_audio.py",
     "test": "node tests/smoke.mjs"
   },
   "devDependencies": {
