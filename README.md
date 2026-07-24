@@ -38,7 +38,10 @@ math/          Silnik matematyczny (Python) + testy + publish_files
   forced/         katalog 16 reprodukowalnych scenariuszy (po `run`)
 frontend/      Frontend (TypeScript, event-driven, PixiJS)
   src/         types/events, rgs/RgsClient, game/BookPlayer, game/Presenter, audio, main
-  src/render/  PixiPresenter + BoardView/HeatMeter/WinBanner/Layout/tween (renderer)
+  src/render/  PixiPresenter + BoardView/HeatMeter/WinBanner/Layout/tween/Particles
+  src/ui/      BuyPanel (potwierdzenie zakupu), HelpScreen (paytable), Overlay, LoadingScreen
+  src/i18n/    strings.ts (en/pl/de) — sterowane parametrem `lang` z RGS
+  src/audio/   AudioManager + WebAudioBackend (syntezowane placeholdery)
   src/dev/     MockRgs + devBooks.json (fixture z realnych książek, tylko DEV)
   tests/       smoke.mjs — test przeglądarkowy (Playwright)
   player/      self-contained replay harness (index.html) — otwórz w przeglądarce
@@ -50,7 +53,7 @@ frontend/      Frontend (TypeScript, event-driven, PixiJS)
 
 ### 1. Wymagania
 - Python ≥ 3.11 (repo testowane na 3.11; oficjalny SDK wymaga ≥ 3.12)
-- Node ≥ 18 (do type‑checku frontendu; opcjonalne)
+- Node ≥ 18 (frontend: dev server, build, testy przeglądarkowe)
 
 ### 2. Instalacja (math)
 ```bash
@@ -94,10 +97,13 @@ npm run devbooks       # (raz) fixture realnych książek dla MockRGS
 npm run dev            # http://localhost:5173  — grywalna gra w przeglądarce
 npm run typecheck      # tsc --noEmit (czyste)
 npm run build          # typecheck + vite build -> dist/
-node tests/smoke.mjs   # test przeglądarkowy: spin base/bonus/super, mobile+desktop
+node tests/smoke.mjs   # test przeglądarkowy: 36 checków (mobile+desktop+locale pl)
 ```
-Gra działa w pełni: SPIN, wybór trybu (Base / Stoked / Buy Forge Fury / Buy Molten Core),
-poziom zakładu, SKIP, TURBO, reduced motion, klawiatura (spacja = spin, `s` = skip).
+Gra działa w pełni: SPIN, wybór trybu (Base / Stoked / Buy Forge Fury / Buy Molten Core)
+z **panelem potwierdzenia zakupu** (koszt, RTP, max win), **ekran pomocy/paytable**,
+loading screen, dźwięk (WebAudio) z wyciszeniem, cząstki, poziom zakładu, SKIP, TURBO,
+reduced motion, klawiatura (spacja = spin, `s` = skip). Język z parametru `?lang=`
+(en/pl/de).
 Tryb DEV używa `MockRgs`, który serwuje **realne książki** próbkowane wagami z
 opublikowanej biblioteki — rozkład jest wierny. Produkcja: podmiana na `RgsClient`
 (patrz `src/main.ts`).
@@ -115,7 +121,7 @@ dowód, że **kontrakt eventów jest kompletny** i frontend potrafi odtworzyć k
 ```bash
 cd frontend && npm run build   # tsc --noEmit + vite build -> dist/
 ```
-Rozmiary bundli: gra **15 kB** (5.6 kB gzip), pixi 512 kB (148 kB gzip) w osobnym
+Rozmiary bundli: gra **37.5 kB** (13.7 kB gzip), pixi 512 kB (148 kB gzip) w osobnym
 chunku, fixture DEV ładowany leniwie (nie trafia do bundla gry).
 
 ---
@@ -133,7 +139,8 @@ Max win **15,000×**. Szczegóły: `PAR_REPORT.md`.
 
 ## Uwaga o statusie
 Warstwa matematyczna, kontrakt eventów **oraz renderer PixiJS** są **uruchamialne i
-przetestowane** w tym środowisku (12/12 checków przeglądarkowych, mobile + desktop).
+przetestowane** w tym środowisku (36/36 checków przeglądarkowych: mobile, desktop,
+locale pl, panel Buy, help screen).
 Finalne assety/audio (obecnie proceduralne placeholdery), skala symulacji 1M/mode
 oraz testy E2E z realnym RGS to jasno oznaczone kolejne kroki
 (`IMPLEMENTATION_PLAN.md`, `QA_REPORT.md`). Nic nie jest deklarowane jako

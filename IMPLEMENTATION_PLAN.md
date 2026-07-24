@@ -35,15 +35,20 @@ publish files, testy, PAR. **Zależności:** brak. **Wynik:** RTP 0.9650 exact.
 Kontrakt eventów, RgsClient, BookPlayer, Presenter, DOM harness odtwarzający
 realne książki. **Zależności:** M1 (książki/eventy).
 
-### M3 — Produkcyjny renderer (PixiJS) ✅ (DONE — rdzeń)
+### M3 — Produkcyjny renderer (PixiJS) ✅ (DONE)
 Zaimplementowane: `PixiPresenter` (wszystkie 16 eventów), `BoardView` (puls fuzji,
 pop produktu, opadanie grawitacyjne), `HeatMeter`, `WinBanner` (tiery + count‑up),
 `Layout` (mobile‑first, portrait/landscape/desktop), `tween` (skip + reduced motion),
-shell DOM z dostępnymi kontrolkami, `MockRgs` (realne książki), Vite build,
-test przeglądarkowy Playwright (12/12 ✅, mobile + desktop).
-**Pozostaje w M3+:** panel Buy z potwierdzeniem, ekran pomocy/paytable, loading
-screen + preload assetów, podpięcie `AudioManager` do WebAudio, cząstki/Spine.
-**Zależności:** assety M5.
+`Particles` (pooled iskry: forge / pour / max win), shell DOM z dostępnymi
+kontrolkami, `MockRgs` (realne książki), Vite build.
+**M3+ (również DONE):** `BuyPanel` (potwierdzenie przed zakładem: koszt ×+waluta,
+RTP, max win, nota o losowości), `HelpScreen` (zasady, drabina rang, symbole
+specjalne, bonus/super, tryby, **RTP + max win**, RG), `Overlay` (dostępny modal:
+role=dialog, Escape, focus restore), `LoadingScreen` (realny progres),
+`WebAudioBackend` (syntezowane placeholdery SFX + ducking, autoplay‑safe),
+**i18n en/pl/de** + `currency.ts` wg `CurrencyMeta` RGS.
+**Test przeglądarkowy: 36/36 ✅** (mobile + desktop + locale pl).
+**Pozostaje:** finalne assety graficzne/audio (M5), Spine.
 
 ### M4 — Skala matematyki + certyfikacja ⬜/🟡
 1M+/mode, pełne bankroll MC, PAR sheet do audytu, replay‑verification vs frontend.

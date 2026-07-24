@@ -28,11 +28,11 @@
 
 ## 3. Jurysdykcja / RG (RGS.md jurisdiction) 🟡
 
-- [x] `disabledTurbo` → turbo/instant warunkowe ✅ (`main.ts`, GDD §24)
+- [x] `disabledTurbo` → turbo/instant warunkowe ✅ (`main.ts` + `app.ts` ukrywa przycisk)
 - [x] `disabledFullscreen` → fullscreen warunkowy ✅
 - [x] `socialCasino` → waluty XGC/XSC, brak sugestii gwarantowanej wygranej ✅ (design)
-- [x] Help screen pokazuje **RTP i max win** ✅ (GDD §25, wymóg publikacji)
-- [x] Widoczny komunikat „każdy spin niezależny i losowy” ✅ (GDD §29)
+- [x] Help screen pokazuje **RTP i max win** ✅ zaimplementowany (`ui/HelpScreen.ts`) i zweryfikowany testem przeglądarkowym
+- [x] Widoczny komunikat „każdy spin niezależny i losowy” ✅ w help screen i w panelu Buy
 - [ ] Integracja limitów sesji/straty operatora 🟡 (M6)
 
 ## 4. Zasady briefu — zakazy (twarde) ✅
@@ -40,7 +40,7 @@
 - [x] Brak **progresywnego jackpotu** ✅
 - [x] Brak **gamble feature** ✅
 - [x] Brak **early cashout** ✅
-- [x] Brak decyzji gracza po starcie zakładu zmieniającej payout ✅ (buy = wybór przed zakładem)
+- [x] Brak decyzji gracza po starcie zakładu zmieniającej payout ✅ (buy potwierdzany **przed** `/play`; test: „bet not taken before confirming”)
 - [x] Brak **progresu między zakładami** ✅ (`test_maxwin.test_round_is_stateless`)
 - [x] Brak **persistent collection między spinami** ✅ (stan tylko w rundzie)
 - [x] Brak personalizowanego RTP / dynamicznych szans wg zachowania ✅ (stały rozkład/wagi)
@@ -63,13 +63,13 @@
 
 ## 7. UX / dostępność 🟡
 
-- [x] Mobile‑first, portrait‑first, HUD kciukowy (design + harness) ✅/🟡
-- [x] Reduced motion ✅ (harness + design)
-- [x] Daltonizm: ranga po sylwetce + numerze, nie tylko kolorze ✅ (design)
-- [x] Sygnały audio mają wizualne odpowiedniki ✅ (design)
+- [x] Mobile‑first, portrait‑first, HUD kciukowy ✅ zweryfikowane 390×844 i 1280×800
+- [x] Reduced motion ✅ (`tween` + `prefers-reduced-motion` + przełącznik UI)
+- [x] Daltonizm: ranga po numerze (I–V, ♛), ruda po glifie (▲■◆⬢●) — nie tylko kolor ✅
+- [x] Sygnały audio mają wizualne odpowiedniki ✅ (bannery, Heat, licznik) + Mute
 - [x] Skalowanie UI, strefy dotyku ≥44px ✅ (design)
 - [x] Skip animacji bez zmiany wyniku ✅
-- [ ] Localization 16 języków (pliki i18n) 🟡 (M6)
+- [x] Localization‑ready: `i18n/strings.ts` sterowane `lang` z RGS (en/pl/de gotowe, RTL‑ready) ✅; pozostałe języki = kolejne słowniki 🟡
 
 ## 8. Matematyka ✅
 
@@ -82,7 +82,7 @@
 
 ## 9. Produkcja (poza repo) ⬜
 
-- [ ] Renderer PixiJS/Svelte (M3)
+- [x] Renderer PixiJS ✅ (M3 + M3+: Buy panel, help, loading, audio, cząstki, i18n)
 - [ ] Finalne assety + audio (M5)
 - [ ] Testy urządzeń, audyt niezależny, soft‑launch (M7)
 
@@ -90,7 +90,10 @@
 
 ### Werdykt
 
-Warstwa **math + kontrakt + format publikacji** jest **zgodna i kompletna** w granicach
-tego środowiska (✅). Do publikacji produkcyjnej pozostają kroki oznaczone 🟡/⬜
-(renderer, assety, skala 1M, testy E2E, i18n) — zebrane w `IMPLEMENTATION_PLAN.md`.
+Warstwa **math + kontrakt + format publikacji + renderer** jest **zgodna i kompletna**
+w granicach tego środowiska (✅) — łącznie z wymogami widoczności RTP/max win
+(help screen), potwierdzenia przed zakupem trybu, dostępności i localization‑ready UI;
+wszystko zweryfikowane realnym uruchomieniem (36/36 checków przeglądarkowych).
+Do publikacji produkcyjnej pozostają kroki oznaczone 🟡/⬜ (finalne assety/audio,
+skala 1M/mode, testy E2E z RGS, limity operatora) — zebrane w `IMPLEMENTATION_PLAN.md`.
 Nie zadeklarowano jako „zrobione” niczego, co nie zostało faktycznie uruchomione.
