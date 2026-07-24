@@ -1,0 +1,83 @@
+/**
+ * HelpScreen — rules, paytable, bet modes, RTP, max win and the responsible
+ * gaming note. Stake Engine requires RTP and max win to be visible to the
+ * player, so both are rendered here from gameInfo.ts.
+ */
+import { Overlay } from './Overlay';
+import { t } from '../i18n/strings';
+import { LADDER, MODES, RTP, MAX_WIN, FUSE_THRESHOLD, JUMP_STEP } from '../game/gameInfo';
+import { symStyle } from '../render/palette';
+
+function hex(n: number): string { return '#' + n.toString(16).padStart(6, '0'); }
+
+function swatch(sym: number): string {
+  const st = symStyle(sym);
+  return `<span class="swatch" style="background:${hex(st.fill)};border-color:${hex(st.ring)};
+    color:${st.ore ? '#9c8358' : '#120a04'}">${st.label}</span>`;
+}
+
+export class HelpScreen extends Overlay {
+  constructor() {
+    super(t('help.title'), t('ui.close'));
+    this.render();
+  }
+
+  /** Rebuild content (also used after a language change). */
+  render(): void {
+    this.setTitle(t('help.title'));
+    const ladderRows = LADDER.map((l) => `
+      <tr>
+        <td>${swatch(l.sym)}</td>
+        <td>${t(l.key)}</td>
+        <td class="num">${l.value === 0 ? '—' : l.value.toFixed(2) + '×'}</td>
+      </tr>`).join('');
+
+    const modeRows = MODES.map((m) => `
+      <tr>
+        <td><b>${t(m.titleKey)}</b><div class="dim">${t(m.descKey)}</div></td>
+        <td class="num">${m.cost.toFixed(2)}×</td>
+        <td class="num">${(RTP * 100).toFixed(2)}%</td>
+      </tr>`).join('');
+
+    this.body.innerHTML = `
+      <div class="kpis">
+        <div><span class="dim">${t('buy.rtp')}</span><b>${(RTP * 100).toFixed(2)}%</b></div>
+        <div><span class="dim">${t('buy.maxwin')}</span><b>${MAX_WIN.toLocaleString()}×</b></div>
+      </div>
+
+      <p>${t('help.core', { n: FUSE_THRESHOLD, j: JUMP_STEP })}</p>
+      <p>${t('help.pay')}</p>
+      <p>${t('help.heat')}</p>
+
+      <h3>${t('help.ladder')}</h3>
+      <div class="scroll">
+        <table>
+          <thead><tr><th></th><th>${t('help.symbol')}</th><th class="num">${t('help.value')}</th></tr></thead>
+          <tbody>${ladderRows}</tbody>
+        </table>
+      </div>
+
+      <h3>${t('help.special')}</h3>
+      <ul>
+        <li>${swatch(12)} <b>${t('sym.flux')}</b> — ${t('help.flux')}</li>
+        <li>${swatch(13)} <b>${t('sym.cinder')}</b> — ${t('help.cinder')}</li>
+      </ul>
+
+      <h3>${t('help.bonus')}</h3>
+      <p>${t('help.bonus.desc')}</p>
+      <h3>${t('help.super')}</h3>
+      <p>${t('help.super.desc')}</p>
+
+      <h3>${t('help.modes')}</h3>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>${t('help.mode')}</th><th class="num">${t('help.cost')}</th><th class="num">${t('buy.rtp')}</th></tr></thead>
+          <tbody>${modeRows}</tbody>
+        </table>
+      </div>
+
+      <h3>${t('help.rg')}</h3>
+      <p class="dim">${t('help.rg.desc')}</p>
+    `;
+  }
+}

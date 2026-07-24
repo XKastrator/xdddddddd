@@ -13,6 +13,8 @@ import { WinBanner, tierName } from './WinBanner';
 import { computeLayout } from './Layout';
 import { THEME } from './palette';
 import { wait } from './tween';
+import { Particles } from './Particles';
+import type { AudioManager } from '../audio/AudioManager';
 
 const COLS = 6, ROWS = 5, BASE_CELL = 96, BASE_GAP = 8;
 const HEAT_CAP: Record<SpinKind, number> = { base: 25, free: 100, super: 10 };
@@ -23,6 +25,7 @@ export class PixiPresenter implements Presenter {
   private board: BoardView;
   private heatMeter: HeatMeter;
   private banner = new WinBanner();
+  private fx = new Particles();
   private hud = new Container();
   private lblMode: Text; private lblSpins: Text; private lblVault: Text;
   private lblSpinWin: Text; private lblTotal: Text;
@@ -30,11 +33,11 @@ export class PixiPresenter implements Presenter {
   skip = false;
   reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  constructor(app: Application) {
+  constructor(app: Application, private audio?: AudioManager) {
     this.board = new BoardView(COLS, ROWS, BASE_CELL, BASE_GAP);
     this.heatMeter = new HeatMeter(this.board.width2);
     this.heatMeter.position.set(0, -30);
-    this.world.addChild(this.heatMeter, this.board);
+    this.world.addChild(this.heatMeter, this.board, this.fx);
 
     type Weight = 'normal' | 'bold' | '700' | '800';
     const mk = (size: number, fill: number, weight: Weight = '700') => new Text({
@@ -85,16 +88,27 @@ export class PixiPresenter implements Presenter {
     this.heatMeter.setCap(HEAT_CAP[kind]); this.heatMeter.reset(heat);
     this.board.setBoard(board);
     this.lblSpinWin.text = 'WIN 0.00×';
+    this.audio?.stinger('spin', 'sfx_spin');
+    this.audio?.setHeatIntensity(heat, HEAT_CAP[kind]);
     await wait(this.reduced ? 40 : 220, () => this.skip, this.reduced);
   }
 
   async anticipation(scatters: number, needed: number): Promise<void> {
     this.lblSpinWin.text = `CINDERS ${scatters}/${needed}…`;
+    this.audio?.stinger('win', 'sfx_anticipation');
     await wait(this.reduced ? 40 : 300, () => this.skip, this.reduced);
   }
 
   async forge(fusions: Fusion[], heat: number): Promise<void> {
+    this.fx.enabled = !this.reduced;
+    this.audio?.stinger('forge', 'sfx_forge');
     await this.board.forge(fusions, this.ctx);
+    // sparks at each forged relic; bigger jumps throw more embers
+    for (const f of fusions) {
+      const p = this.board.cellCenter(f.anchor[0], f.anchor[1]);
+      this.fx.burst(p.x, p.y, 8 + Math.min(16, f.cells.length * 2));
+    }
+    this.audio?.stinger('heat', 'sfx_heat');
     await this.heatMeter.set(heat, this.ctx);
   }
 
@@ -115,6 +129,7 @@ export class PixiPresenter implements Presenter {
     this.lblMode.text = mode === 'molten_core' ? 'MOLTEN CORE' : 'FORGE FURY';
     if (mode === 'molten_core') this.lblVault.text = 'VAULT 0.00×';
     this.lblSpins.text = `SPINS ${spins}`;
+    this.audio?.enterState(mode === 'molten_core' ? 'super' : 'bonus');
     await this.banner.show(mode === 'molten_core' ? 'SUPERBONUS' : 'BONUS', 0, this.ctx);
   }
 
@@ -138,12 +153,29 @@ export class PixiPresenter implements Presenter {
 
   async pour(vault: number, _heat: number, win: number): Promise<void> {
     this.lblVault.text = `VAULT ${vault.toFixed(2)}×`;
+    this.audio?.stinger('super', 'sfx_pour');
+    // lava spills across the whole grid at the culmination
+    this.fx.enabled = !this.reduced;
+    for (let c = 0; c < COLS; c++) {
+      const p = this.board.cellCenter(0, c);
+      this.fx.burst(p.x, p.y, 10, 3.0, THEME.amber);
+    }
     await this.banner.show('THE POUR', win, this.ctx);
   }
 
   async totalWin(totalWin: number): Promise<void> { this.lblTotal.text = `TOTAL ${totalWin.toFixed(2)}×`; }
 
-  async maxWin(): Promise<void> { await this.banner.show('★ MAX WIN ★', 15000, this.ctx); }
+  async maxWin(): Promise<void> {
+    this.audio?.stinger('maxwin', 'sfx_maxwin');
+    this.fx.enabled = !this.reduced;
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c += 2) {
+        const p = this.board.cellCenter(r, c);
+        this.fx.burst(p.x, p.y, 4, 3.4, THEME.gold);
+      }
+    }
+    await this.banner.show('★ MAX WIN ★', 15000, this.ctx);
+  }
 
   async finalWin(amount: number): Promise<void> {
     this.lblTotal.text = `TOTAL ${amount.toFixed(2)}×`;

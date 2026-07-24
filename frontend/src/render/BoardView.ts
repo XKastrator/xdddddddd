@@ -43,6 +43,14 @@ export class BoardView extends Container {
 
   private at(r: number, c: number): SymbolSprite { return this.cells[r * this.cols + c]; }
 
+  /** Centre of a cell in BoardView-local coordinates (for particle emission). */
+  cellCenter(r: number, c: number): { x: number; y: number } {
+    return {
+      x: this.gap + c * (this.cell + this.gap) + this.cell / 2,
+      y: this.gap + r * (this.cell + this.gap) + this.cell / 2,
+    };
+  }
+
   setBoard(board: Board): void {
     for (let r = 0; r < this.rows; r++)
       for (let c = 0; c < this.cols; c++) {

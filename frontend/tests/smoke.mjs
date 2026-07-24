@@ -51,6 +51,9 @@ for (const [label, vp] of [['mobile', { width: 390, height: 844 }],
 
   await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: 'networkidle' });
   await page.waitForSelector('#stage canvas', { timeout: 10000 });
+  // loading screen must disappear once boot completes
+  await page.waitForFunction(() => !document.querySelector('.loading'), null, { timeout: 15000 });
+  check(`[${label}] loading screen removed`, true);
 
   const size = await page.$eval('#stage canvas', (c) => ({ w: c.width, h: c.height }));
   check(`[${label}] canvas has size`, size.w > 0 && size.h > 0, `${size.w}x${size.h}`);
@@ -58,10 +61,37 @@ for (const [label, vp] of [['mobile', { width: 390, height: 844 }],
     (await page.textContent('#balance')) === '$1000.00', await page.textContent('#balance'));
   await page.screenshot({ path: path.join(SHOTS, `${label}-idle.png`) });
 
+  // --- help / paytable screen: must expose RTP and max win (Stake Engine rule)
+  await page.click('#helpBtn');
+  await page.waitForSelector('.overlay:not([hidden])', { timeout: 5000 });
+  const helpText = await page.textContent('.overlay-body');
+  check(`[${label}] help shows RTP`, helpText.includes('96.50%'));
+  check(`[${label}] help shows max win`, helpText.includes('15,000×'));
+  check(`[${label}] help lists the rank ladder`,
+    helpText.includes('Mythril') && helpText.includes('Molten Crown'));
+  await page.screenshot({ path: path.join(SHOTS, `${label}-help.png`) });
+  await page.keyboard.press('Escape');               // Escape closes the overlay
+  await page.waitForFunction(() => !document.querySelector('.overlay:not([hidden])'),
+    null, { timeout: 5000 });
+  check(`[${label}] help closes on Escape`, true);
+
   for (const mode of ['base', 'bonus', 'super']) {
     await page.selectOption('#mode', mode);
     const balBefore = await page.textContent('#balance');
     await page.click('#spin');
+
+    // buy modes must ask for confirmation BEFORE the bet is placed
+    if (mode === 'bonus' || mode === 'super') {
+      await page.waitForSelector('#buy-ok', { timeout: 5000 });
+      const buyText = await page.textContent('.overlay-body');
+      check(`[${label}] ${mode}: buy panel shows cost/RTP/max win`,
+        buyText.includes('96.50%') && buyText.includes('15,000×'));
+      check(`[${label}] ${mode}: bet not taken before confirming`,
+        (await page.textContent('#balance')) === balBefore);
+      if (mode === 'super') await page.screenshot({ path: path.join(SHOTS, `${label}-buy.png`) });
+      await page.click('#buy-ok');
+    }
+
     await page.waitForTimeout(150);
     await page.click('#skip');                       // fast-forward the presentation
     await page.waitForFunction(() => !document.querySelector('#spin').disabled,
@@ -72,7 +102,34 @@ for (const [label, vp] of [['mobile', { width: 390, height: 844 }],
     if (mode === 'super') await page.screenshot({ path: path.join(SHOTS, `${label}-super.png`) });
   }
 
+  // cancelling a buy must not place a bet
+  await page.selectOption('#mode', 'super');
+  const balBeforeCancel = await page.textContent('#balance');
+  await page.click('#spin');
+  await page.waitForSelector('#buy-cancel', { timeout: 5000 });
+  await page.click('#buy-cancel');
+  await page.waitForTimeout(200);
+  check(`[${label}] cancelled buy places no bet`,
+    (await page.textContent('#balance')) === balBeforeCancel);
+
   check(`[${label}] no page errors`, errors.length === 0, errors.slice(0, 2).join(' | '));
+  await page.close();
+}
+
+// --- localisation: the RGS `lang` URL param must drive every player-facing string
+{
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await page.goto(`http://127.0.0.1:${port}/?lang=pl&device=mobile`, { waitUntil: 'networkidle' });
+  await page.waitForFunction(() => !document.querySelector('.loading'), null, { timeout: 15000 });
+  check('[i18n] spin button localised (pl)', (await page.textContent('#spin')) === 'ZAKRĘĆ',
+    await page.textContent('#spin'));
+  check('[i18n] html lang attribute set', (await page.getAttribute('html', 'lang')) === 'pl');
+  await page.click('#helpBtn');
+  await page.waitForSelector('.overlay:not([hidden])', { timeout: 5000 });
+  const pl = await page.textContent('.overlay-body');
+  check('[i18n] help localised (pl)', pl.includes('Drabina rang') && pl.includes('Odpowiedzialna gra'));
+  check('[i18n] RTP/max win still shown', pl.includes('96.50%') && pl.includes('15,000×'));
+  await page.screenshot({ path: path.join(SHOTS, 'help-pl.png') });
   await page.close();
 }
 
