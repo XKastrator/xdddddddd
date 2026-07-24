@@ -24,6 +24,10 @@ export interface TweenOpts {
 export function tween(o: TweenOpts): Promise<void> {
   const ease = o.ease ?? easeOutCubic;
   const dur = o.reducedMotion ? Math.min(o.duration, 40) : o.duration;
+  // Already skipping: jump to the end state SYNCHRONOUSLY. Waiting even one
+  // frame per tween is what turns a skipped bonus round into a multi-second
+  // stall, because a long round awaits hundreds of them in sequence.
+  if (o.shouldSkip?.()) { o.onUpdate(1); return Promise.resolve(); }
   return new Promise((resolve) => {
     if (dur <= 0) { o.onUpdate(1); resolve(); return; }
     const start = performance.now();

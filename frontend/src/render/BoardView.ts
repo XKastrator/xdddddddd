@@ -8,6 +8,7 @@ import type { Board, Fusion, Spawned } from '../types/events';
 import { Sym } from '../types/events';
 import { SymbolSprite, type TextureProvider } from './SymbolSprite';
 import { tween, easeOutBack, easeOutCubic } from './tween';
+import { squash, pulse } from './juice';
 import { THEME } from './palette';
 
 export interface AnimCtx { shouldSkip: () => boolean; reduced: boolean; }
@@ -62,16 +63,37 @@ export class BoardView extends Container {
   }
 
   async forge(fusions: Fusion[], ctx: AnimCtx): Promise<void> {
-    // 1) pulse every consumed cell
+    // 1) the winning group flares and is drawn INTO the anchor before fusing,
+    //    so the player sees cause (these cells) and effect (this relic)
     const consumed: SymbolSprite[] = [];
     for (const f of fusions) {
       for (const [r, c] of f.cells) consumed.push(this.at(r, c));
       for (const [r, c] of f.wildCells) consumed.push(this.at(r, c));
     }
-    await tween({
-      duration: 320, ease: easeOutCubic, shouldSkip: ctx.shouldSkip, reducedMotion: ctx.reduced,
-      onUpdate: (t) => { const s = 1 + 0.22 * Math.sin(t * Math.PI); for (const sp of consumed) sp.scale.set(s); },
+    const home = consumed.map((sp) => ({ x: sp.x, y: sp.y }));
+    const targets = fusions.flatMap((f) => {
+      const a = this.at(f.anchor[0], f.anchor[1]);
+      const all = [...f.cells, ...f.wildCells];
+      return all.map(() => ({ x: a.x, y: a.y }));
     });
+    await tween({
+      duration: 360, ease: easeOutCubic, shouldSkip: ctx.shouldSkip, reducedMotion: ctx.reduced,
+      onUpdate: (t) => {
+        const flare = 1 + 0.26 * Math.sin(t * Math.PI);
+        const pull = t * t;                       // accelerate inward
+        for (let i = 0; i < consumed.length; i++) {
+          const sp = consumed[i];
+          sp.scale.set(flare * (1 - 0.35 * pull));
+          const tgt = targets[i] ?? home[i];
+          sp.x = home[i].x + (tgt.x - home[i].x) * pull * 0.55;
+          sp.y = home[i].y + (tgt.y - home[i].y) * pull * 0.55;
+          sp.alpha = 1 - 0.45 * pull;
+        }
+      },
+    });
+    for (let i = 0; i < consumed.length; i++) {
+      consumed[i].x = home[i].x; consumed[i].y = home[i].y; consumed[i].alpha = 1;
+    }
     // 2) clear consumed, place product at anchor with a pop
     const anchors: SymbolSprite[] = [];
     for (const f of fusions) {
@@ -81,31 +103,43 @@ export class BoardView extends Container {
       sp.setSymbol(f.to); sp.scale.set(0.2); anchors.push(sp);
     }
     await tween({
-      duration: 300, ease: easeOutBack, shouldSkip: ctx.shouldSkip, reducedMotion: ctx.reduced,
+      duration: 320, ease: easeOutBack, shouldSkip: ctx.shouldSkip, reducedMotion: ctx.reduced,
       onUpdate: (t) => { for (const sp of anchors) sp.scale.set(0.2 + 0.8 * t); },
     });
+    await Promise.all(anchors.map((sp) => squash(sp, 0.18, 200, ctx)));
+  }
+
+  /** Celebrate the relics that paid, so a win is legible on the board itself. */
+  async celebrate(cells: { r: number; c: number }[], ctx: AnimCtx): Promise<void> {
+    if (!cells.length) return;
+    await Promise.all(cells.map(({ r, c }) => pulse(this.at(r, c), 2, 420, ctx)));
   }
 
   async gravity(board: Board, spawned: Spawned[], ctx: AnimCtx): Promise<void> {
     this.setBoard(board);
-    const spawnedSet = new Set(spawned.map((s) => s.r * this.cols + s.c));
-    const drop = this.cell * 0.9;
-    const sprites = [...spawnedSet].map((i) => this.cells[i]);
-    for (const sp of sprites) sp.alpha = 0.2;
+    const drop = this.cell * 1.15;
+    // Stagger by column: a whole board landing on one frame reads as a slideshow,
+    // a left-to-right cascade reads as physical.
+    const byCell = spawned.map((s) => ({
+      sp: this.at(s.r, s.c),
+      homeY: this.gap + s.r * (this.cell + this.gap),
+      delay: s.c * 0.085 + s.r * 0.02,
+    }));
+    for (const e of byCell) { e.sp.alpha = 0; e.sp.y = e.homeY - drop; }
+
+    const span = 1 + Math.max(0, ...byCell.map((e) => e.delay));
     await tween({
-      duration: 220, ease: easeOutCubic, shouldSkip: ctx.shouldSkip, reducedMotion: ctx.reduced,
+      duration: 420, ease: (t) => t, shouldSkip: ctx.shouldSkip, reducedMotion: ctx.reduced,
       onUpdate: (t) => {
-        for (const sp of sprites) {
-          sp.alpha = 0.2 + 0.8 * t;
-          const base = this.gap + Math.floor(this.cells.indexOf(sp) / this.cols) * (this.cell + this.gap);
-          sp.y = base - drop * (1 - t);
+        const now = t * span;
+        for (const e of byCell) {
+          const local = Math.max(0, Math.min(1, now - e.delay));
+          e.sp.alpha = local;
+          e.sp.y = e.homeY - drop * (1 - easeOutCubic(local));
         }
       },
     });
-    for (const sp of sprites) {
-      const idx = this.cells.indexOf(sp);
-      sp.y = this.gap + Math.floor(idx / this.cols) * (this.cell + this.gap);
-      sp.alpha = 1;
-    }
+    for (const e of byCell) { e.sp.y = e.homeY; e.sp.alpha = 1; }
+    await Promise.all(byCell.slice(0, 8).map((e) => squash(e.sp, 0.14, 160, ctx)));
   }
 }

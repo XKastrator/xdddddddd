@@ -15,6 +15,7 @@ import { computeLayout } from './Layout';
 import { THEME } from './palette';
 import { wait } from './tween';
 import { Particles } from './Particles';
+import { CoinShower, shake } from './juice';
 import { Background } from './Background';
 import { Rig, EMBERWRIGHT_BONES, type PartTextures } from './Rig';
 import type { AudioManager } from '../audio/AudioManager';
@@ -39,6 +40,7 @@ export class PixiPresenter implements Presenter {
   private heatMeter: HeatMeter;
   private banner = new WinBanner();
   private fx = new Particles();
+  private coins = new CoinShower();
   private hud = new Container();
   private lblMode: Text; private lblSpins: Text; private lblVault: Text;
   private lblSpinWin: Text; private lblTotal: Text;
@@ -46,7 +48,7 @@ export class PixiPresenter implements Presenter {
   skip = false;
   reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  constructor(app: Application, private audio?: AudioManager,
+  constructor(private app: Application, private audio?: AudioManager,
               assets: PresenterAssets = {}) {
     this.bg = new Background(assets.scenes ?? {});
     this.board = new BoardView(COLS, ROWS, BASE_CELL, BASE_GAP, assets.getTexture);
@@ -66,7 +68,7 @@ export class PixiPresenter implements Presenter {
     this.lblSpinWin = mk(15, THEME.gold); this.lblTotal = mk(20, THEME.txt, '800');
     this.hud.addChild(this.lblMode, this.lblSpins, this.lblVault, this.lblSpinWin, this.lblTotal);
 
-    app.stage.addChild(this.bg, this.rigHolder, this.world, this.hud, this.banner);
+    app.stage.addChild(this.bg, this.rigHolder, this.world, this.coins, this.hud, this.banner);
     this.resize(app.renderer.width, app.renderer.height);
     this.showIdleBoard();
 
@@ -149,15 +151,19 @@ export class PixiPresenter implements Presenter {
   async anticipation(scatters: number, needed: number): Promise<void> {
     this.lblSpinWin.text = `CINDERS ${scatters}/${needed}…`;
     this.audio?.stinger('win', 'sfx_cinder');
+    void shake(this.world, 2.5, 420, this.ctx);
     await wait(this.reduced ? 40 : 300, () => this.skip, this.reduced);
   }
 
   async forge(fusions: Fusion[], heat: number): Promise<void> {
     this.fx.enabled = !this.reduced;
-    const big = fusions.some((f) => f.cells.length >= 7);
+    const biggest = Math.max(...fusions.map((f) => f.cells.length));
+    const big = biggest >= 7;
     this.audio?.stinger('forge', big ? 'sfx_forge_big' : 'sfx_forge');
     this.rig?.play('strike');
     await this.board.forge(fusions, this.ctx);
+    // the hammer landing: impact scales with the size of the group that fused
+    void shake(this.world, big ? 9 : 4.5, big ? 300 : 190, this.ctx);
     // sparks at each forged relic; bigger jumps throw more embers
     for (const f of fusions) {
       const p = this.board.cellCenter(f.anchor[0], f.anchor[1]);
@@ -173,10 +179,11 @@ export class PixiPresenter implements Presenter {
 
   async heat(heat: number): Promise<void> { await this.heatMeter.set(heat, this.ctx); }
 
-  async settleWin(_relics: Relic[], _heat: number, win: number): Promise<void> {
+  async settleWin(relics: Relic[], _heat: number, win: number): Promise<void> {
     if (win <= 0) return;
     this.lblSpinWin.text = `WIN ${win.toFixed(2)}×`;
-    await wait(this.reduced ? 40 : 260, () => this.skip, this.reduced);
+    await this.board.celebrate(relics.map((r) => ({ r: r.r, c: r.c })), this.ctx);
+    await wait(this.reduced ? 40 : 200, () => this.skip, this.reduced);
   }
 
   async bonusStart(mode: string, spins: number, kind: SpinKind): Promise<void> {
@@ -211,6 +218,8 @@ export class PixiPresenter implements Presenter {
   async pour(vault: number, _heat: number, win: number): Promise<void> {
     this.lblVault.text = `VAULT ${vault.toFixed(2)}×`;
     this.audio?.stinger('super', 'sting_pour');
+    void shake(this.world, 14, 700, this.ctx);
+    this.coins.erupt(this.app.renderer.width, this.app.renderer.height, 46);
     // lava spills across the whole grid at the culmination
     this.fx.enabled = !this.reduced;
     for (let c = 0; c < COLS; c++) {
@@ -224,6 +233,8 @@ export class PixiPresenter implements Presenter {
 
   async maxWin(): Promise<void> {
     this.audio?.stinger('maxwin', 'sting_maxwin');
+    void shake(this.world, 18, 900, this.ctx);
+    this.coins.erupt(this.app.renderer.width, this.app.renderer.height, 70);
     this.fx.enabled = !this.reduced;
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c += 2) {
@@ -239,6 +250,9 @@ export class PixiPresenter implements Presenter {
     if (amount >= 20) {
       this.audio?.stinger('bigwin', 'sting_bigwin');
       this.rig?.play('cheer');
+      this.coins.erupt(this.app.renderer.width, this.app.renderer.height,
+                       amount >= 300 ? 44 : 24);
+      void shake(this.world, amount >= 300 ? 10 : 6, 380, this.ctx);
       await this.banner.show(tierName(amount), amount, this.ctx);
     }
   }
