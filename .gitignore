@@ -9,6 +9,9 @@ node_modules/
 frontend/dist/
 *.tsbuildinfo
 
+# Test artifacts (regenerate with `node tests/smoke.mjs`)
+frontend/tests/shots/
+
 # OS / editor
 .DS_Store
 *.swp

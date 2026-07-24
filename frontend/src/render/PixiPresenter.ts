@@ -1,0 +1,156 @@
+/**
+ * PixiPresenter — production renderer implementing the Presenter contract on top
+ * of PixiJS v8. Consumes the event stream from BookPlayer and animates it. Holds
+ * NO game maths. Placeholder procedural art (see ART_BIBLE.md) plugs out later.
+ */
+import { Application, Container, Graphics, Text } from 'pixi.js';
+import type { Presenter } from '../game/Presenter';
+import type { Board, Fusion, Relic, Spawned, SpinKind } from '../types/events';
+import { Sym } from '../types/events';
+import { BoardView } from './BoardView';
+import { HeatMeter } from './HeatMeter';
+import { WinBanner, tierName } from './WinBanner';
+import { computeLayout } from './Layout';
+import { THEME } from './palette';
+import { wait } from './tween';
+
+const COLS = 6, ROWS = 5, BASE_CELL = 96, BASE_GAP = 8;
+const HEAT_CAP: Record<SpinKind, number> = { base: 25, free: 100, super: 10 };
+
+export class PixiPresenter implements Presenter {
+  private bg = new Graphics();
+  private world = new Container();
+  private board: BoardView;
+  private heatMeter: HeatMeter;
+  private banner = new WinBanner();
+  private hud = new Container();
+  private lblMode: Text; private lblSpins: Text; private lblVault: Text;
+  private lblSpinWin: Text; private lblTotal: Text;
+
+  skip = false;
+  reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  constructor(app: Application) {
+    this.board = new BoardView(COLS, ROWS, BASE_CELL, BASE_GAP);
+    this.heatMeter = new HeatMeter(this.board.width2);
+    this.heatMeter.position.set(0, -30);
+    this.world.addChild(this.heatMeter, this.board);
+
+    type Weight = 'normal' | 'bold' | '700' | '800';
+    const mk = (size: number, fill: number, weight: Weight = '700') => new Text({
+      text: '', style: { fill, fontFamily: 'system-ui, sans-serif', fontSize: size, fontWeight: weight } });
+    this.lblMode = mk(16, THEME.amber2, '800');
+    this.lblSpins = mk(15, THEME.txt); this.lblVault = mk(15, THEME.teal);
+    this.lblSpinWin = mk(15, THEME.gold); this.lblTotal = mk(20, THEME.txt, '800');
+    this.hud.addChild(this.lblMode, this.lblSpins, this.lblVault, this.lblSpinWin, this.lblTotal);
+
+    app.stage.addChild(this.bg, this.world, this.hud, this.banner);
+    this.resize(app.renderer.width, app.renderer.height);
+    this.showIdleBoard();
+  }
+
+  /** Fill the grid with ore before the first spin so the game never looks empty. */
+  showIdleBoard(): void {
+    const ores = [Sym.O1, Sym.O2, Sym.O3, Sym.O4, Sym.O5];
+    const board: Board = Array.from({ length: ROWS }, (_, r) =>
+      Array.from({ length: COLS }, (_, c) => ores[(r * COLS + c * 3 + r * 2) % ores.length]));
+    this.board.setBoard(board);
+    this.lblTotal.text = 'TOTAL 0.00×';
+    this.lblSpinWin.text = 'WIN 0.00×';
+  }
+
+  private get ctx() { return { shouldSkip: () => this.skip, reduced: this.reduced }; }
+
+  resize(w: number, h: number): void {
+    this.bg.clear();
+    this.bg.rect(0, 0, w, h).fill({ color: THEME.bg0 });
+    this.bg.roundRect(w * 0.1, -h * 0.1, w * 0.8, h * 0.5, 40).fill({ color: 0x1c130b, alpha: 0.5 });
+
+    const lay = computeLayout(w, h, COLS, ROWS);
+    const scale = lay.cell / BASE_CELL;
+    this.world.scale.set(scale);
+    this.world.position.set(lay.boardX, lay.boardY);
+
+    const pad = Math.round(Math.min(w, h) * 0.05);
+    this.lblMode.position.set(pad, pad * 0.7);
+    this.lblTotal.position.set(pad, pad * 0.7 + 22);
+    this.lblSpinWin.position.set(w - pad - 160, pad * 0.7);
+    this.lblSpins.position.set(w - pad - 160, pad * 0.7 + 22);
+    this.lblVault.position.set(w - pad - 160, pad * 0.7 + 44);
+    this.banner.resize(w, h);
+  }
+
+  // --- Presenter contract --------------------------------------------------
+  async revealBoard(board: Board, heat: number, kind: SpinKind, _scatters: number): Promise<void> {
+    this.heatMeter.setCap(HEAT_CAP[kind]); this.heatMeter.reset(heat);
+    this.board.setBoard(board);
+    this.lblSpinWin.text = 'WIN 0.00×';
+    await wait(this.reduced ? 40 : 220, () => this.skip, this.reduced);
+  }
+
+  async anticipation(scatters: number, needed: number): Promise<void> {
+    this.lblSpinWin.text = `CINDERS ${scatters}/${needed}…`;
+    await wait(this.reduced ? 40 : 300, () => this.skip, this.reduced);
+  }
+
+  async forge(fusions: Fusion[], heat: number): Promise<void> {
+    await this.board.forge(fusions, this.ctx);
+    await this.heatMeter.set(heat, this.ctx);
+  }
+
+  async gravity(spawned: Spawned[], board: Board): Promise<void> {
+    await this.board.gravity(board, spawned, this.ctx);
+  }
+
+  async heat(heat: number): Promise<void> { await this.heatMeter.set(heat, this.ctx); }
+
+  async settleWin(_relics: Relic[], _heat: number, win: number): Promise<void> {
+    if (win <= 0) return;
+    this.lblSpinWin.text = `WIN ${win.toFixed(2)}×`;
+    await wait(this.reduced ? 40 : 260, () => this.skip, this.reduced);
+  }
+
+  async bonusStart(mode: string, spins: number, kind: SpinKind): Promise<void> {
+    this.heatMeter.setCap(HEAT_CAP[kind]);
+    this.lblMode.text = mode === 'molten_core' ? 'MOLTEN CORE' : 'FORGE FURY';
+    if (mode === 'molten_core') this.lblVault.text = 'VAULT 0.00×';
+    this.lblSpins.text = `SPINS ${spins}`;
+    await this.banner.show(mode === 'molten_core' ? 'SUPERBONUS' : 'BONUS', 0, this.ctx);
+  }
+
+  async spinCounter(remaining: number, total: number): Promise<void> {
+    this.lblSpins.text = `SPIN ${total - remaining}/${total}`;
+  }
+
+  async retrigger(added: number, _spins: number): Promise<void> {
+    await this.banner.show('RETRIGGER', added, this.ctx);
+  }
+
+  async superSeed(board: Board, _minRank: number): Promise<void> {
+    this.board.setBoard(board);
+    await wait(this.reduced ? 40 : 220, () => this.skip, this.reduced);
+  }
+
+  async lockUpdate(_locked: Relic[], vault: number): Promise<void> {
+    this.lblVault.text = `VAULT ${vault.toFixed(2)}×`;
+    await wait(this.reduced ? 20 : 120, () => this.skip, this.reduced);
+  }
+
+  async pour(vault: number, _heat: number, win: number): Promise<void> {
+    this.lblVault.text = `VAULT ${vault.toFixed(2)}×`;
+    await this.banner.show('THE POUR', win, this.ctx);
+  }
+
+  async totalWin(totalWin: number): Promise<void> { this.lblTotal.text = `TOTAL ${totalWin.toFixed(2)}×`; }
+
+  async maxWin(): Promise<void> { await this.banner.show('★ MAX WIN ★', 15000, this.ctx); }
+
+  async finalWin(amount: number): Promise<void> {
+    this.lblTotal.text = `TOTAL ${amount.toFixed(2)}×`;
+    if (amount >= 20) await this.banner.show(tierName(amount), amount, this.ctx);
+  }
+
+  async roundEnd(): Promise<void> { /* app re-enables the spin button */ }
+
+  setMode(name: string): void { this.lblMode.text = name.toUpperCase(); }
+}

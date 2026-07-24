@@ -12,7 +12,8 @@
     "exactOptionalPropertyTypes": false,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "outDir": "dist"
+    "resolveJsonModule": true,
+    "noEmit": true
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "vite.config.ts"]
 }

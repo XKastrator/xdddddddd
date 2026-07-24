@@ -5,12 +5,20 @@
   "description": "Molten Crown — Stake Engine frontend (event-driven, TypeScript). RGS client, event contract, book player.",
   "type": "module",
   "scripts": {
+    "dev": "vite",
     "typecheck": "tsc --noEmit",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "devbooks": "python3 src/dev/make_devbooks.py",
     "player": "python3 player/build_player.py && echo 'open frontend/player/index.html'"
   },
   "devDependencies": {
-    "typescript": "^5.5.4"
+    "playwright": "^1.61.1",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.21"
   },
-  "//": "Production presentation uses PixiJS + Svelte per Stake Engine Frontend SDK; that layer implements the Presenter interface. The player/ harness demonstrates the event contract with zero build step."
+  "//": "Production presentation uses PixiJS + Svelte per Stake Engine Frontend SDK; that layer implements the Presenter interface. The player/ harness demonstrates the event contract with zero build step.",
+  "dependencies": {
+    "pixi.js": "^8.19.0"
+  }
 }
