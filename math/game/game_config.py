@@ -50,7 +50,7 @@ class GameConfig(Config):
         # bigger jumps, higher Heat under persistence (the bonus dynamic).
         self.drop_weights_bonus = [22.0, 22.0, 22.0, 22.0, 0.0, 7.0, 1.10]
         # STOKED ante: more Cinders (higher trigger) + a bit more Flux
-        self.drop_weights_ante  = [17.0, 17.0, 17.0, 17.0, 17.0, 4.0, 2.00]
+        self.drop_weights_ante  = [17.0, 17.0, 17.0, 17.0, 17.0, 4.0, 1.30]
 
         # SUPER (Molten Core): pre-seeded high but diluted with ore so fusions
         # are not guaranteed; Heat capped LOW so Vault x Heat stays in range.

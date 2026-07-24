@@ -92,9 +92,15 @@ def _finalize(book, cfg):
 # --------------------------------------------------------------------------- #
 # Forge Fury (free spins) — Heat PERSISTS across spins.
 # --------------------------------------------------------------------------- #
-def play_forge_fury(book, cfg, rng, spins, fill_syms, fill_weights, heat_cap):
+def play_forge_fury(book, cfg, rng, spins, fill_syms, fill_weights, heat_cap,
+                    hot=False):
     E.bonus_start(book, "forge_fury", spins, "free")
     heat = 1
+    if hot:  # forced max-win construction: rich seed + hot start + extra spins
+        fill_syms = [S.O1, S.O2, S.BRONZE, S.IRON, S.SILVER, S.WILD]
+        fill_weights = [10.0, 10.0, 24.0, 22.0, 18.0, 10.0]
+        heat = 8
+        spins = max(spins, 14)
     remaining, total = spins, spins
     while remaining > 0:
         remaining -= 1
@@ -176,17 +182,20 @@ def play_book(cfg, mode_name: str, book_id: int, rng: Rng,
             E.settle_win(book, _relic_list(board, cfg.paytable), 0.0, heat, pay_heat)
             E.total_win_update(book, book.payout_x)
         book.criteria = "basegame"
-        if scatters >= 3 and book.payout_x < cfg.wincap:
+        force_wc = bool(force.get("wincap"))
+        if (scatters >= 3 or force_wc) and book.payout_x < cfg.wincap:
             book.criteria = "freegame"
-            spins = cfg.freespins_by_scatter.get(min(scatters, 5), 8)
+            spins = cfg.freespins_by_scatter.get(min(max(scatters, 3), 5), 10)
             play_forge_fury(book, cfg, rng, spins, cfg.symbols,
-                            cfg.drop_weights_bonus, cfg.heat_cap_bonus)
+                            cfg.drop_weights_bonus, cfg.heat_cap_bonus,
+                            hot=force_wc)
         return _finalize(book, cfg)
 
     if mode_name == "bonus":
         book.criteria = "freegame"
         play_forge_fury(book, cfg, rng, cfg.freespins_by_scatter[3],
-                        cfg.symbols, cfg.drop_weights_bonus, cfg.heat_cap_bonus)
+                        cfg.symbols, cfg.drop_weights_bonus, cfg.heat_cap_bonus,
+                        hot=bool(force.get("wincap")))
         return _finalize(book, cfg)
 
     if mode_name == "super":
