@@ -77,8 +77,8 @@ super_big=2098×, maxwin_*=15000×.
 | Cząstki iskier | ✅ `Particles` |
 | **Custom typografia** | ✅ autorski krój „Emberwright Slab” (49 glifów, `GlyphText`) — w grze nie ma już `system-ui` |
 | **UI w canvasie** (zamiast HTML pod spodem) | ✅ `UiPanel`: SPIN/SKIP/TURBO/HELP, stepper zakładu, wybór trybu, readouty; w DOM został tylko pasek dostępności |
-| Shadery / filtry Pixi | ⬜ |
-| Spritesheet idle/hit per symbol | ⬜ (są tweeny, brak klatkowych animacji) |
+| Shadery / filtry (custom GLSL) | ✅ `filters.ts`: HeatHaze (sila = Heat), Shimmer (sweep przy forge), Chromatic (Pour / max win); WebGL 2.0 zweryfikowane |
+| Idle/hit animacja symboli | ✅ relikwie oddychają i migoczą (faza per komórka), ruda pozostaje martwa; hit = flare + wciągnięcie + squash. Klatkowe spritesheety nadal opcjonalne |
 | Muzyka z rytmem/melodią | ⬜ (nadal drony + akordy) |
 
 ## 4. Znane problemy / ograniczenia

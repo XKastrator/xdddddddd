@@ -249,3 +249,33 @@ samo jak sam sprite glifu.
 `npm run assets`. Znaki spoza zakresu degradują się do spacji — dla lokalizacji
 poza łacińskim ASCII (np. polskie diakrytyki w banerach) trzeba dorysować glify
 albo zostawić dany tekst w warstwie DOM, tak jak działa ekran pomocy.
+
+---
+
+## 15. Shadery (custom GLSL) i animacja idle symboli
+
+Trzy efekty, których nie da się podrobić tweenami — `frontend/src/render/filters.ts`,
+pojedynczy pass, GLSL ES 3.00 (Pixi dokleja nagłówek wersji):
+
+| Filtr | Co robi | Sterowanie |
+|---|---|---|
+| **HeatHaze** | dwie rozstrojone fale pionowe zniekształcają scenę, mocniej przy lawie u dołu | `strength` = f(Heat) — piec **widocznie** się rozgrzewa wraz z mnożnikiem |
+| **Shimmer** | pasmo refleksu przejeżdża po planszy przy każdej fuzji | mocniejsze przy dużym skoku rangi |
+| **Chromatic** | promieniste rozszczepienie RGB, wygasające | akcent uderzenia: Pour i max win |
+
+**Premultiplied alpha:** Pixi pracuje na premultiplikowanej alfie, więc składnik
+addytywny w Shimmerze jest mnożony przez `color.a` — inaczej przezroczyste
+obszary rozświetlają się na szaro.
+
+**WebGL wymuszony** (`preference: 'webgl'` w `app.ts`): filtry dostarczają tylko
+program GLSL, a WebGL to też szersza baza urządzeń mobilnych. Wsparcie WebGPU
+wymagałoby równoległych źródeł WGSL.
+
+**Animacja idle symboli** (`BoardView.tickIdle` + `SymbolSprite.setIdle`):
+relikwie oddychają i migocze im poświata, każda komórka z przesunięciem fazy wg
+indeksu, żeby plansza nigdy nie pulsowała zgodnie. **Ruda pozostaje nieruchoma** —
+jest paliwem i ma czytać się jako martwy ciężar. Animacja dotyka wyłącznie
+sprite'a grafiki, więc nie walczy z tweenami kontenera (wciągnięcie przy fuzji,
+squash, puls przy wygranej).
+
+**Wszystko wyłączane przy `reduced motion`.**
