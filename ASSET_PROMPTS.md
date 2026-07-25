@@ -50,17 +50,26 @@ rzucanych na podłoże. To wszystko rysuje kod i podwoi się.
 ## 1. KOTWICA STYLU — wklej to na początku KAŻDEGO promptu na symbol
 
 ```
-Premium casino slot game symbol, hand-painted digital illustration in a dark
-fantasy forge setting. A single object, centered, isolated on a plain solid
-#FF00FF magenta background. Strong directional key light from the upper left;
-a warm orange rim light from below, as if lit by a forge fire. Rich painterly
-rendering with visible material texture, metal grain, chips and honest wear.
-Bold, instantly readable silhouette that still reads at 80x80 pixels. Thick
-soft dark contour around the object. Painterly, NOT flat vector, NOT cel
-shaded, NOT 3D render, NOT glossy plastic. No text, no numbers, no logo, no
-frame, no border, no ground shadow. Square composition, the object fills about
-80% of the frame.
+Stylized 2D game art asset for a premium casino slot, in the chunky hand-painted
+style of Hearthstone card art and World of Warcraft item icons. A single object,
+centered, isolated on a plain solid #FF00FF magenta background.
+
+Exaggerated, chunky, slightly oversized proportions — bold and readable rather
+than anatomically correct. Rich saturated colours. Smooth painted gradients with
+crisp bright highlights and clean specular hits. A thick dark outline around the
+whole silhouette. Key light from the upper left, warm orange rim light from
+below as if lit by a forge.
+
+Clean, appealing and game-ready. NOT photorealistic. NOT gritty or grimy. NOT a
+3D render. NOT flat vector. NOT cel-shaded anime. No text, no numbers, no logo,
+no frame, no border, no ground shadow. Square composition, object fills about
+80% of the frame, still reads clearly at 80x80 pixels.
 ```
+
+**Dlaczego akurat tak:** słowa „concept art", „painterly", „photorealistic",
+„weathered", „gritty" pchają model w brudny realizm. „Hearthstone card art",
+„WoW item icon", „chunky", „stylized", „saturated" trafiają dokładnie w to, jak
+wyglądają symbole u topowych wydawców slotów.
 
 Do tego doklejasz jedno zdanie opisu obiektu z tabel poniżej.
 
@@ -79,11 +88,11 @@ bezwartościowy materiał, a kolor ma rozdzielać warianty.
 
 | # | Plik | Zdanie do doklejenia |
 |---|---|---|
-| O1 | `sym_O1.png` | `A chunk of raw ore: a rough dark grey-brown pentagon-shaped rock, broken open, with a cluster of glowing malachite-green crystal prisms growing out of its heart. Crystal colour #2fbf6a with pale green highlights.` |
-| O2 | `sym_O2.png` | `A chunk of raw ore: a rough dark grey-brown blocky cube-shaped rock, broken open, with a cluster of deep azurite-blue crystal prisms growing out of its heart. Crystal colour #2f7fdf with pale blue highlights.` |
-| O3 | `sym_O3.png` | `A chunk of raw ore: a rough dark grey-brown diamond-shaped rock, broken open, with a cluster of cinnabar-red crystal prisms growing out of its heart. Crystal colour #e0452a with warm pink highlights.` |
-| O4 | `sym_O4.png` | `A chunk of raw ore: a rough dark grey-brown hexagonal rock, broken open, with a cluster of sulphur-yellow crystal prisms growing out of its heart. Crystal colour #c9d423 with pale lime highlights.` |
-| O5 | `sym_O5.png` | `A chunk of raw ore: a rough dark grey-brown rounded nodule, broken open, with a cluster of amethyst-violet crystal prisms growing out of its heart. Crystal colour #9a4fe0 with pale lilac highlights.` |
+| O1 | `sym_O1.png` | `A chunky pentagon-shaped chunk of dark grey rock, cracked open, with big oversized glossy malachite-green crystals bursting out of it. The crystals are the hero — bright, saturated #2fbf6a, glassy, with strong white specular hits. The rock is dull and dark so the crystals pop.` |
+| O2 | `sym_O2.png` | `A chunky blocky cube-shaped chunk of dark grey rock, cracked open, with big oversized glossy azurite-blue crystals bursting out of it. The crystals are the hero — bright, saturated #2f7fdf, glassy, with strong white specular hits. The rock is dull and dark so the crystals pop.` |
+| O3 | `sym_O3.png` | `A chunky diamond-shaped chunk of dark grey rock, cracked open, with big oversized glossy cinnabar-red crystals bursting out of it. The crystals are the hero — bright, saturated #e0452a, glassy, with strong white specular hits. The rock is dull and dark so the crystals pop.` |
+| O4 | `sym_O4.png` | `A chunky hexagonal chunk of dark grey rock, cracked open, with big oversized glossy sulphur-yellow crystals bursting out of it. The crystals are the hero — bright, saturated #c9d423, glassy, with strong white specular hits. The rock is dull and dark so the crystals pop.` |
+| O5 | `sym_O5.png` | `A chunky rounded nodule of dark grey rock, cracked open, with big oversized glossy amethyst-violet crystals bursting out of it. The crystals are the hero — bright, saturated #9a4fe0, glassy, with strong white specular hits. The rock is dull and dark so the crystals pop.` |
 
 > **Wskazówka:** wygeneruj całą piątkę jako jeden arkusz 2×3. Prompt:
 > *„A contact sheet, 3 columns by 2 rows on a plain magenta background, showing
@@ -97,19 +106,19 @@ zdobienia i mocniejsza własna poświata.
 
 | Ranga | Plik | Zdanie do doklejenia |
 |---|---|---|
-| I | `sym_BRONZE.png` | `A freshly cast bronze ingot, a heavy trapezoidal bar straight out of the mould, warm brown-gold metal with a rough cast top face and a cooling seam down the front. Lowest tier: matte, almost no glow.` |
-| II | `sym_IRON.png` | `A blacksmith's forge hammer: a heavy rectangular iron head with flared, worn striking faces, mounted on a thick ash-wood haft with an iron collar and two rivets. Cool grey steel and warm brown wood.` |
-| III | `sym_SILVER.png` | `A silver heater shield with a horizontal bronze band across the middle, a domed central boss, riveted edge binding and battle scratches. Cool bright silver with warm bronze accents. Faint glow.` |
-| IV | `sym_GOLD.png` | `An ornate gold chalice on a flared foot, its bowl brimming with molten gold that glows from inside, set with two small pale gems on the rim and one orange gem on the knop. Strong warm glow.` |
-| V | `sym_MYTHRIL.png` | `A mythril longsword standing point-up: a slender double-edged blade with a glowing fuller down the centre, a straight crossguard, leather-wrapped grip and a flat disc pommel set with a pale gem. The metal is luminous mint-teal #37e0c8 and clearly magical. Strong cold glow.` |
-| VI | `sym_CROWN.png` | `The Molten Crown: a heavy crown of five tall points, forged from gold that is still partly liquid, with molten orange metal running down between the points and three white-hot gems set into the band. It glows from within like something just pulled out of a furnace. The single most valuable object in the set — maximum glow, maximum ornament.` |
+| I | `sym_BRONZE.png` | `A fat, chunky bronze ingot with softly rounded corners, like a stylized gold bar from a mobile game. Warm brown-gold metal, one broad lit top face, a clean highlight along the top edge. Lowest tier: solid and simple, barely any glow.` |
+| II | `sym_IRON.png` | `A chunky blacksmith's hammer with a comically oversized iron head and a short stubby wooden handle — cartoon-heavy proportions. Bright cool steel head with big round rivets and a clean specular streak, warm brown wooden handle with an iron collar.` |
+| III | `sym_SILVER.png` | `A bold stylized shield with a thick rounded outline, a wide horizontal gold band across the middle and a big domed round boss in the centre. Bright polished silver with warm gold accents and chunky rivets. Clean and heraldic, not battered.` |
+| IV | `sym_GOLD.png` | `A fat ornate golden goblet with a wide round bowl and a flared foot, brimming with glowing molten gold that spills slightly over the rim. Oversized bright gems set into the bowl. Rich saturated gold, strong warm inner glow, glossy highlights.` |
+| V | `sym_MYTHRIL.png` | `A stylized magic sword standing point-up, with a broad tapering blade, a chunky straight crossguard, a wrapped grip and an oversized round pommel gem. The blade glows luminous mint-teal #37e0c8 from a bright line down its centre. Clean, heroic, obviously enchanted.` |
+| VI | `sym_CROWN.png` | `The Molten Crown: a big chunky five-pointed crown of gold that is still half liquid, with glowing orange molten metal running down between the points and three oversized white-hot gems set into the band. Radiates heat and light. The most spectacular object in the whole set — maximum glow, maximum sparkle.` |
 
 ### 2.3 Symbole specjalne
 
 | Rola | Plik | Zdanie do doklejenia |
 |---|---|---|
-| WILD | `sym_FLUX.png` | `A single suspended droplet of luminous molten flux, teardrop-shaped, glass-like and translucent, glowing bright cyan-teal #37e0c8 from its core, with a white-hot centre and light refracting through it. Weightless, floating, clearly magical.` |
-| SCATTER | `sym_CINDER.png` | `A four-pointed burning cinder — a blazing ember star with long sharp points, a white-hot core and orange #ff7a18 flame licking off the tips, throwing sparks. Brightest, most attention-grabbing object in the whole set.` |
+| WILD | `sym_FLUX.png` | `A single big glossy teardrop of magical liquid, floating in mid air, translucent like polished glass, glowing bright cyan-teal #37e0c8 with a white-hot core and a crisp white highlight on its upper left. Clean, jewel-like, clearly magical.` |
+| SCATTER | `sym_CINDER.png` | `A blazing four-pointed star of fire with long sharp points and a white-hot core, orange #ff7a18 flame curling off the tips and bright sparks flying. Bold and graphic, the brightest and most eye-catching object in the whole set.` |
 
 ---
 
@@ -135,12 +144,16 @@ na którym nie widać planszy.
 ### 3.1 Plan daleki — sama jaskinia
 
 ```
-A wide painted environment background for a dark fantasy slot game: the inside
-of a vast underground forge cavern. Cold dark basalt rock, deep shadows, glowing
-lava seams cracking across the cavern floor, embers drifting in the air. Painted
-concept-art style, atmospheric, moody. IMPORTANT: no columns, no pillars, no
-architecture, no props, no characters, no vignette, no dark corners — this is
-only the far distance. Keep the centre dark, empty and low contrast. No text.
+A stylized 2D game background in the style of a Hearthstone game board or
+Diablo Immortal environment art: the inside of a vast underground forge cavern.
+Chunky simplified rock forms, bold shapes, saturated colours, clean painted
+rendering with crisp highlights — stylized and readable, NOT photorealistic, NOT
+gritty. Glowing lava seams cracking across the cavern floor, embers drifting in
+the air.
+
+IMPORTANT: no columns, no pillars, no architecture, no props, no characters, no
+vignette, no dark corners — this is only the far distance. Keep the centre dark,
+empty and low contrast, because the game grid is drawn on top of it. No text.
 Square 1:1 composition.
 ```
 
@@ -155,15 +168,19 @@ Warianty:
 ### 3.2 Plan średni — architektura
 
 ```
-Painted architectural elements for a dark fantasy forge, isolated on a plain
-solid #FF00FF magenta background with nothing else in the image. Two massive
-basalt stone columns, one at the far left edge and one at the far right edge,
-running the full height of the image, with carved capitals and bases and thin
-glowing lava seams running down the stone. Between them at the top, a heavy
-stone vault arch spanning the width. THE ENTIRE CENTRE AND LOWER MIDDLE OF THE
-IMAGE MUST BE COMPLETELY EMPTY MAGENTA — the game grid goes there. Painted
-concept-art style, warm rim light from below. No text, no characters, no props.
-Square 1:1.
+Stylized 2D game architecture in the style of Hearthstone game board framing,
+isolated on a plain solid #FF00FF magenta background with nothing else in the
+image. Two massive chunky stone columns, one at the far left edge and one at the
+far right edge, running the full height of the image, with big carved capitals
+and bases and glowing lava seams running down the stone. Between them at the
+top, a heavy stone vault arch spanning the width.
+
+Bold simplified forms, saturated colour, clean painted rendering with crisp
+highlights and a thick dark outline — stylized, NOT photorealistic, NOT gritty.
+Warm orange rim light from below.
+
+THE ENTIRE CENTRE AND LOWER MIDDLE OF THE IMAGE MUST BE COMPLETELY EMPTY
+MAGENTA — the game grid goes there. No text, no characters, no props. Square 1:1.
 ```
 
 Warianty: `_mid` dla `base` chłodny i ciemny, dla `bonus` mocniej podświetlony
@@ -172,14 +189,19 @@ od dołu pomarańczem, dla `super` kamień rozgrzany do czerwoności przy podsta
 ### 3.3 Plan bliski — pierwszy plan
 
 ```
-Painted foreground props for a dark fantasy forge, isolated on a plain solid
-#FF00FF magenta background. Along the BOTTOM EDGE only: a heavy stone floor
-ledge running the full width, with a glowing molten seam along its top edge, an
-anvil silhouette on the left and a fire brazier on the right. In the TOP LEFT
-and TOP RIGHT CORNERS only: heavy iron chains hanging down from above, and a
-hanging iron lantern. Everything else in the image must be completely empty
-magenta. These are dark foreground silhouettes, nearly black, lit only by rim
-light. Painted style. No text, no characters. Square 1:1.
+Stylized 2D game foreground props for a fantasy forge, isolated on a plain solid
+#FF00FF magenta background.
+
+Along the BOTTOM EDGE only: a chunky stone floor ledge running the full width
+with a glowing molten seam along its top edge, a big cartoon-proportioned anvil
+on the left and a fire brazier with glowing coals on the right. In the TOP LEFT
+and TOP RIGHT CORNERS only: heavy iron chains hanging down and a hanging iron
+lantern.
+
+Everything else in the image must be completely empty magenta. These are dark
+foreground shapes, nearly black, lit only by warm orange rim light — bold
+simplified silhouettes with thick outlines, stylized, NOT photorealistic. No
+text, no characters. Square 1:1.
 ```
 
 ---
@@ -191,17 +213,23 @@ light. Painted style. No text, no characters. Square 1:1.
 | `character.png` | 1024×1536 (pion) | PNG z alfą |
 
 ```
-A full-body character illustration for a dark fantasy slot game: a master
-blacksmith standing at his forge, seen from the front, isolated on a plain solid
-#FF00FF magenta background. A broad-shouldered adult man in his fifties, weather-
-beaten face, heavy grey-streaked beard, deep-set eyes, a leather apron over a
-soot-stained tunic, thick bracers, a wide belt with a heavy buckle, one gloved
-hand resting on a large forge hammer whose head sits on the ground. Strong warm
-orange rim light from the forge on his left side, cool dark shadow elsewhere.
-Painted concept-art style, confident brushwork, heroic but grounded and worn —
-he looks like he has actually worked. Clearly an adult, dignified, not cute, not
-stylised, not chibi. No text, no logo, no ground shadow. Vertical 2:3
-composition, the figure fills the frame from head to feet.
+A full-body stylized game character in the style of Hearthstone hero art or a
+Blizzard cinematic character card: a master blacksmith standing at his forge,
+seen from the front, isolated on a plain solid #FF00FF magenta background.
+
+An adult man in his fifties with heroic exaggerated proportions — huge broad
+shoulders, oversized hands and forearms, a barrel chest tapering to smaller legs.
+A big square jaw, a thick grey-streaked beard, heavy brows. A leather apron over
+a dark tunic, thick bracers, a wide belt with an oversized buckle. One hand rests
+on the handle of a large forge hammer whose head sits on the ground.
+
+Saturated colours, smooth painted shading with crisp bright highlights, a thick
+dark outline around the whole figure. Strong warm orange rim light from the forge
+on his left side. Confident, imposing, appealing — stylized game art, NOT
+photorealistic, NOT gritty realism, NOT chibi, NOT anime. Clearly an adult.
+
+No text, no logo, no ground shadow. Vertical 2:3 composition, the figure fills
+the frame from head to feet.
 ```
 
 > **Uwaga techniczna:** obecny kod animuje postać kośćmi z osobnych części
@@ -223,12 +251,17 @@ Rozsądniejsze podejście: wygeneruj **samą oprawę**, a napis zostaje mój
 (rysowany kodem, `assets/generate_logo.py`) i nakładam go na środek.
 
 ```
-A decorative emblem for a dark fantasy game logo, isolated on a plain solid
-#FF00FF magenta background. A heavy forged crown of molten gold at the top
-centre, with liquid metal dripping from it, flanked by two curling iron scroll
-ornaments that sweep outwards and downwards to frame an empty space in the
-middle. THE MIDDLE MUST BE COMPLETELY EMPTY — a title will be placed there.
-Molten orange #ff7a18 and gold #f2c14e, glowing hot metal, painted style, no
+A decorative emblem for a stylized fantasy game logo, in the chunky glossy style
+of mobile game UI badges, isolated on a plain solid #FF00FF magenta background.
+
+A big chunky forged crown of molten gold at the top centre with liquid metal
+dripping from it, flanked by two curling iron scroll ornaments that sweep
+outwards and downwards to frame an empty space in the middle.
+
+THE MIDDLE MUST BE COMPLETELY EMPTY — a title will be placed there.
+
+Saturated molten orange #ff7a18 and gold #f2c14e, glowing hot metal, thick dark
+outline, crisp specular highlights. Stylized and glossy, NOT photorealistic. No
 text, no letters, no words of any kind. Wide horizontal composition.
 ```
 
@@ -244,12 +277,15 @@ wyprostuj literowanie ręcznie w wektorze.
 | `lobby.jpg` | 512×512 | JPEG |
 
 ```
-A casino game lobby thumbnail, square 1:1. A single dramatic hero object dead
-centre: a heavy crown of molten gold, glowing white-hot, with liquid metal
-running off it, against a dark basalt cavern with a warm orange glow rising from
-below. One strong focal point, high contrast, instantly readable as a thumbnail
-at 200x200 pixels. Painted style, rich and premium. No text, no letters, no
-numbers, no UI, no frame.
+A casino game lobby thumbnail in the chunky stylized style of a mobile game
+store icon, square 1:1. A single dramatic hero object dead centre: a big chunky
+crown of molten gold, glowing white-hot, with liquid metal running off it,
+against a dark cavern with a warm orange glow rising from below.
+
+Bold saturated colours, thick dark outline, crisp highlights, one strong focal
+point, very high contrast so it is instantly readable at 200x200 pixels.
+Stylized and premium, NOT photorealistic. No text, no letters, no numbers, no
+UI, no frame.
 ```
 
 ---
