@@ -53,6 +53,22 @@ export class BoardView extends Container {
     };
   }
 
+  /**
+   * Per-frame idle life. Relics breathe and flicker (they are hot metal); ore
+   * stays inert because it is fuel and must read as dead weight. Each cell gets
+   * a phase offset from its index so the grid never pulses in lockstep.
+   */
+  tickIdle(elapsed: number, reduced: boolean): void {
+    if (reduced) return;
+    for (let i = 0; i < this.cells.length; i++) {
+      const sp = this.cells[i];
+      if (!sp.animatable) continue;
+      const phase = i * 0.7;
+      sp.setIdle(1 + 0.018 * Math.sin(elapsed * 1.9 + phase),
+                 0.9 + 0.10 * Math.sin(elapsed * 2.7 + phase * 1.3));
+    }
+  }
+
   setBoard(board: Board): void {
     for (let r = 0; r < this.rows; r++)
       for (let c = 0; c < this.cols; c++) {

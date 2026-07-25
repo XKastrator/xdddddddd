@@ -35,6 +35,9 @@ async function main(): Promise<void> {
   await app.init({
     background: 0x0a0806, antialias: true, resizeTo: host,
     resolution: Math.min(2, window.devicePixelRatio || 1), autoDensity: true,
+    // custom filters ship a GLSL program only; WebGL is also the wider install
+    // base on the mobile devices a casino game has to cover
+    preference: 'webgl',
   });
   host.appendChild(app.canvas);
   loading.set(0.1);

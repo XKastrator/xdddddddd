@@ -41,6 +41,23 @@ export class SymbolSprite extends Container {
     this.setSymbol(Sym.EMPTY);
   }
 
+  /** True for relics: they are hot metal and get idle life. Ore stays inert. */
+  get animatable(): boolean {
+    return this.sym >= Sym.BRONZE && this.sym <= Sym.CINDER;
+  }
+
+  /**
+   * Idle life, driven by the board's ticker. Applied to the ART sprite only, so
+   * it never fights the tweens that animate the sprite container itself
+   * (forge pull-in, squash, celebrate pulse all move `this`).
+   */
+  setIdle(scale: number, glowAlpha: number): void {
+    if (!this.art.visible) return;
+    const base = this.size * ART_FILL;
+    this.art.width = this.art.height = base * scale;
+    this.glow.alpha = glowAlpha;
+  }
+
   setSymbol(sym: Sym): void {
     this.sym = sym;
     const tex = sym === Sym.EMPTY ? undefined : this.getTexture?.(sym);
@@ -50,12 +67,20 @@ export class SymbolSprite extends Container {
 
   /** Preferred path: authored artwork from the texture atlas. */
   private drawFromAtlas(tex: Texture): void {
+    const s = this.size;
+    const st = symStyle(this.sym);
     this.glow.clear();
+    // a soft ember behind hot metal, so the idle flicker has something to modulate
+    if (st.glow > 0) {
+      this.glow.circle(s / 2, s / 2, s * 0.44)
+        .fill({ color: st.ring, alpha: 0.10 + 0.14 * st.glow });
+    }
+    this.glow.alpha = 1;
     this.tile.clear();
     this.txt.text = '';
     this.art.visible = true;
     this.art.texture = tex;
-    this.art.width = this.art.height = this.size * ART_FILL;
+    this.art.width = this.art.height = s * ART_FILL;
   }
 
   /** Fallback: procedural shapes (no binary assets required). */

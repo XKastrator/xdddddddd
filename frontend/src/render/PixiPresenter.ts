@@ -13,9 +13,10 @@ import { HeatMeter } from './HeatMeter';
 import { WinBanner, tierName } from './WinBanner';
 import { computeLayout } from './Layout';
 import { THEME } from './palette';
-import { wait } from './tween';
+import { tween, wait } from './tween';
 import { Particles } from './Particles';
 import { CoinShower, shake } from './juice';
+import { HeatHazeFilter, ShimmerFilter, ChromaticFilter } from './filters';
 import { Background } from './Background';
 import { Rig, EMBERWRIGHT_BONES, type PartTextures } from './Rig';
 import type { AudioManager } from '../audio/AudioManager';
@@ -45,6 +46,9 @@ export class PixiPresenter implements Presenter {
   private banner: WinBanner;
   private fx = new Particles();
   private coins = new CoinShower();
+  private haze = new HeatHazeFilter(0);
+  private shimmer = new ShimmerFilter();
+  private chroma = new ChromaticFilter();
   private hud = new Container();
   private lblMode: GlyphText; private lblSpins: GlyphText; private lblVault: GlyphText;
   private lblSpinWin: GlyphText; private lblTotal: GlyphText;
@@ -53,6 +57,7 @@ export class PixiPresenter implements Presenter {
 
   skip = false;
   reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  private kind: SpinKind = 'base';
 
   constructor(private app: Application, private audio?: AudioManager,
               assets: PresenterAssets = {}) {
@@ -87,6 +92,11 @@ export class PixiPresenter implements Presenter {
       this.lblSpinWin = stub(); this.lblTotal = stub();
     }
 
+    // heat haze distorts the scene only; shimmer sweeps the grid; chromatic
+    // aberration is an impact accent applied to the whole stage
+    this.bg.filters = [this.haze];
+    this.world.filters = [this.shimmer];
+    app.stage.filters = [this.chroma];
     app.stage.addChild(this.bg, this.rigHolder, this.world, this.coins, this.hud);
     if (this.panel) app.stage.addChild(this.panel);
     app.stage.addChild(this.banner);
@@ -98,8 +108,13 @@ export class PixiPresenter implements Presenter {
     app.ticker.add((ticker) => {
       const dt = ticker.deltaMS / 1000;
       elapsed += dt;
-      if (!this.reduced) this.bg.drift(elapsed);
+      if (!this.reduced) {
+        this.bg.drift(elapsed);
+        this.haze.advance(dt);
+        this.shimmer.advance(dt);
+      }
       this.rig?.update(dt);
+      this.board.tickIdle(elapsed, this.reduced);
     });
   }
 
@@ -114,6 +129,29 @@ export class PixiPresenter implements Presenter {
   }
 
   private get ctx() { return { shouldSkip: () => this.skip, reduced: this.reduced }; }
+
+  /** Sweep the shimmer band across the grid once. */
+  private flashShimmer(peak: number): void {
+    if (this.reduced) { this.shimmer.strength = 0; return; }
+    void tween({
+      duration: 520, shouldSkip: () => this.skip,
+      onUpdate: (t) => { this.shimmer.strength = Math.sin(t * Math.PI) * peak; },
+    }).then(() => { this.shimmer.strength = 0; });
+  }
+
+  /** Radial RGB split as an impact accent. */
+  private flashChroma(peak: number, duration: number): void {
+    if (this.reduced) { this.chroma.amount = 0; return; }
+    void tween({
+      duration, shouldSkip: () => this.skip,
+      onUpdate: (t) => { this.chroma.amount = (1 - t) ** 2 * peak; },
+    }).then(() => { this.chroma.amount = 0; });
+  }
+
+  /** Heat drives how hard the room shimmers — the forge visibly cooks. */
+  private setHazeFromHeat(heat: number, cap: number): void {
+    this.haze.strength = this.reduced ? 0 : Math.min(1, heat / cap) * 1.6 + 0.25;
+  }
 
   resize(w: number, h: number): void {
     this.bg.resize(w, h);
@@ -164,11 +202,13 @@ export class PixiPresenter implements Presenter {
 
   // --- Presenter contract --------------------------------------------------
   async revealBoard(board: Board, heat: number, kind: SpinKind, _scatters: number): Promise<void> {
+    this.kind = kind;
     this.heatMeter.setCap(HEAT_CAP[kind]); this.heatMeter.reset(heat);
     this.board.setBoard(board);
     this.lblSpinWin.text = 'WIN 0.00×';
     this.audio?.stinger('spin', 'sfx_spin');
     this.audio?.setHeatIntensity(heat, HEAT_CAP[kind]);
+    this.setHazeFromHeat(heat, HEAT_CAP[kind]);
     await wait(this.reduced ? 40 : 220, () => this.skip, this.reduced);
   }
 
@@ -194,6 +234,8 @@ export class PixiPresenter implements Presenter {
       this.fx.burst(p.x, p.y, 8 + Math.min(16, f.cells.length * 2));
     }
     this.audio?.stinger('heat', 'sfx_heat');
+    this.flashShimmer(big ? 0.85 : 0.5);
+    this.setHazeFromHeat(heat, HEAT_CAP[this.kind]);
     await this.heatMeter.set(heat, this.ctx);
   }
 
@@ -211,6 +253,7 @@ export class PixiPresenter implements Presenter {
   }
 
   async bonusStart(mode: string, spins: number, kind: SpinKind): Promise<void> {
+    this.kind = kind;
     this.heatMeter.setCap(HEAT_CAP[kind]);
     this.lblMode.text = mode === 'molten_core' ? 'MOLTEN CORE' : 'FORGE FURY';
     if (mode === 'molten_core') this.lblVault.text = 'VAULT 0.00×';
@@ -243,6 +286,7 @@ export class PixiPresenter implements Presenter {
     this.lblVault.text = `VAULT ${vault.toFixed(2)}×`;
     this.audio?.stinger('super', 'sting_pour');
     void shake(this.world, 14, 700, this.ctx);
+    this.flashChroma(0.5, 900);
     this.coins.erupt(this.app.renderer.width, this.app.renderer.height, 46);
     // lava spills across the whole grid at the culmination
     this.fx.enabled = !this.reduced;
@@ -258,6 +302,7 @@ export class PixiPresenter implements Presenter {
   async maxWin(): Promise<void> {
     this.audio?.stinger('maxwin', 'sting_maxwin');
     void shake(this.world, 18, 900, this.ctx);
+    this.flashChroma(0.85, 1200);
     this.coins.erupt(this.app.renderer.width, this.app.renderer.height, 70);
     this.fx.enabled = !this.reduced;
     for (let r = 0; r < ROWS; r++) {
