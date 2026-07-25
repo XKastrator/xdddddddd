@@ -4,7 +4,7 @@
  * NO game maths. Symbol artwork comes from the texture atlas (see ART_BIBLE.md);
  * a procedural fallback keeps the game runnable without binary assets.
  */
-import { Application, Container, Text } from 'pixi.js';
+import { Application, Container } from 'pixi.js';
 import type { Presenter } from '../game/Presenter';
 import type { Board, Fusion, Relic, Spawned, SpinKind } from '../types/events';
 import { Sym } from '../types/events';
@@ -20,12 +20,16 @@ import { Background } from './Background';
 import { Rig, EMBERWRIGHT_BONES, type PartTextures } from './Rig';
 import type { AudioManager } from '../audio/AudioManager';
 import type { TextureProvider } from './SymbolSprite';
+import { GlyphFont, GlyphText } from './GlyphText';
+import { UiPanel, type UiCallbacks } from './UiPanel';
 import type { Texture } from 'pixi.js';
 
 export interface PresenterAssets {
   getTexture?: TextureProvider;
   scenes?: Partial<Record<'base' | 'bonus' | 'super', Texture>>;
   rigParts?: PartTextures;
+  font?: GlyphFont | null;
+  ui?: UiCallbacks;
 }
 
 const COLS = 6, ROWS = 5, BASE_CELL = 96, BASE_GAP = 8;
@@ -38,12 +42,14 @@ export class PixiPresenter implements Presenter {
   private rigHolder = new Container();
   private board: BoardView;
   private heatMeter: HeatMeter;
-  private banner = new WinBanner();
+  private banner: WinBanner;
   private fx = new Particles();
   private coins = new CoinShower();
   private hud = new Container();
-  private lblMode: Text; private lblSpins: Text; private lblVault: Text;
-  private lblSpinWin: Text; private lblTotal: Text;
+  private lblMode: GlyphText; private lblSpins: GlyphText; private lblVault: GlyphText;
+  private lblSpinWin: GlyphText; private lblTotal: GlyphText;
+  /** In-canvas control bar. Null when no display face was loaded. */
+  panel: UiPanel | null = null;
 
   skip = false;
   reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -56,19 +62,34 @@ export class PixiPresenter implements Presenter {
       this.rig = new Rig(EMBERWRIGHT_BONES, assets.rigParts);
       this.rigHolder.addChild(this.rig);
     }
-    this.heatMeter = new HeatMeter(this.board.width2);
+    this.banner = new WinBanner(assets.font ?? null);
+    this.heatMeter = new HeatMeter(this.board.width2, 14, assets.font ?? null);
     this.heatMeter.position.set(0, -30);
     this.world.addChild(this.heatMeter, this.board, this.fx);
 
-    type Weight = 'normal' | 'bold' | '700' | '800';
-    const mk = (size: number, fill: number, weight: Weight = '700') => new Text({
-      text: '', style: { fill, fontFamily: 'system-ui, sans-serif', fontSize: size, fontWeight: weight } });
-    this.lblMode = mk(16, THEME.amber2, '800');
-    this.lblSpins = mk(15, THEME.txt); this.lblVault = mk(15, THEME.teal);
-    this.lblSpinWin = mk(15, THEME.gold); this.lblTotal = mk(20, THEME.txt, '800');
-    this.hud.addChild(this.lblMode, this.lblSpins, this.lblVault, this.lblSpinWin, this.lblTotal);
+    // The HUD uses the authored display face; falling back to the OS font is
+    // exactly the tell we are removing, so a missing atlas hides the HUD text
+    // rather than rendering it in system-ui.
+    const font = assets.font ?? null;
+    const mk = (size: number, tint: number, align: 'left' | 'right' = 'left') =>
+      new GlyphText(font!, { size, tint, align, letterSpacing: 1.5 });
+    if (font) {
+      this.lblMode = mk(14, THEME.amber2);
+      this.lblSpins = mk(13, THEME.txt, 'right');
+      this.lblVault = mk(13, THEME.teal, 'right');
+      this.lblSpinWin = mk(13, THEME.gold, 'right');
+      this.lblTotal = mk(19, THEME.txt);
+      this.hud.addChild(this.lblMode, this.lblSpins, this.lblVault, this.lblSpinWin, this.lblTotal);
+      if (assets.ui) this.panel = new UiPanel(font, assets.ui);
+    } else {
+      const stub = () => ({ text: '', position: { set: () => {} } } as unknown as GlyphText);
+      this.lblMode = stub(); this.lblSpins = stub(); this.lblVault = stub();
+      this.lblSpinWin = stub(); this.lblTotal = stub();
+    }
 
-    app.stage.addChild(this.bg, this.rigHolder, this.world, this.coins, this.hud, this.banner);
+    app.stage.addChild(this.bg, this.rigHolder, this.world, this.coins, this.hud);
+    if (this.panel) app.stage.addChild(this.panel);
+    app.stage.addChild(this.banner);
     this.resize(app.renderer.width, app.renderer.height);
     this.showIdleBoard();
 
@@ -96,20 +117,23 @@ export class PixiPresenter implements Presenter {
 
   resize(w: number, h: number): void {
     this.bg.resize(w, h);
+    // the control bar owns the bottom of the stage; the board gets what is left
+    const panelH = this.panel ? this.panel.layout(w, h) : 0;
+    const playH = h - panelH;
 
-    const lay = computeLayout(w, h, COLS, ROWS);
+    const lay = computeLayout(w, playH, COLS, ROWS);
     const scale = lay.cell / BASE_CELL;
     this.world.scale.set(scale);
     this.world.position.set(lay.boardX, lay.boardY);
 
-    const pad = Math.round(Math.min(w, h) * 0.05);
-    this.lblMode.position.set(pad, pad * 0.7);
-    this.lblTotal.position.set(pad, pad * 0.7 + 22);
-    this.lblSpinWin.position.set(w - pad - 160, pad * 0.7);
-    this.lblSpins.position.set(w - pad - 160, pad * 0.7 + 22);
-    this.lblVault.position.set(w - pad - 160, pad * 0.7 + 44);
-    this.banner.resize(w, h);
-    this.placeRig(w, h, lay.boardX, lay.boardY, lay.boardH ?? 0);
+    const pad = Math.round(Math.min(w, playH) * 0.05);
+    this.lblMode.position.set(pad, pad * 0.6);
+    this.lblTotal.position.set(pad, pad * 0.6 + 26);
+    this.lblSpinWin.position.set(w - pad, pad * 0.6);
+    this.lblSpins.position.set(w - pad, pad * 0.6 + 22);
+    this.lblVault.position.set(w - pad, pad * 0.6 + 42);
+    this.banner.resize(w, playH);
+    this.placeRig(w, playH, lay.boardX, lay.boardY, lay.boardH ?? 0);
   }
 
   /**

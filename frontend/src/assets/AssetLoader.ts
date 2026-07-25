@@ -39,6 +39,8 @@ export interface RigMeta {
     pivot: { x: number; y: number } }>;
 }
 
+import { GlyphFont, type FontMeta } from '../render/GlyphText';
+
 export type SceneName = 'base' | 'bonus' | 'super';
 const SCENES: SceneName[] = ['base', 'bonus', 'super'];
 
@@ -47,12 +49,13 @@ export class AssetLoader {
   private audio = new Map<string, ArrayBuffer>();
   private scenes: Partial<Record<SceneName, Texture>> = {};
   private parts: Record<string, { texture: Texture; pivot: { x: number; y: number } }> = {};
+  private glyphFont: GlyphFont | null = null;
   loaded = false;
 
   /** `onProgress` receives 0..1 across the whole asset set. */
   async load(base = 'assets/', onProgress?: (p: number) => void): Promise<void> {
     // meta + atlas + character + 3 scenes + audio
-    const steps = 2 + 1 + SCENES.length + AUDIO_IDS.length;
+    const steps = 3 + 1 + SCENES.length + AUDIO_IDS.length;
     let done = 0;
     const tick = () => onProgress?.(++done / steps);
 
@@ -69,6 +72,14 @@ export class AssetLoader {
         frame: new Rectangle(f.x, f.y, f.w, f.h),
       }));
     }
+
+    // display typeface — the HUD falls back to Pixi Text if this is missing
+    try {
+      const fm: FontMeta = await fetch(`${base}font.json`).then((r) => r.json());
+      const fsheet: Texture = await Assets.load(`${base}${fm.image}`);
+      this.glyphFont = new GlyphFont(fm, fsheet);
+    } catch { /* no display face: caller uses its fallback */ }
+    tick();
 
     // character rig parts — optional, the game runs without the smith
     try {
@@ -106,6 +117,7 @@ export class AssetLoader {
   texture(sym: Sym): Texture | undefined { return this.textures.get(sym); }
   audioBuffer(id: string): ArrayBuffer | undefined { return this.audio.get(id); }
   sceneTextures(): Partial<Record<SceneName, Texture>> { return this.scenes; }
+  font(): GlyphFont | null { return this.glyphFont; }
   rigParts(): Record<string, { texture: Texture; pivot: { x: number; y: number } }> {
     return this.parts;
   }

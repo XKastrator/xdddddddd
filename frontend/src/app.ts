@@ -21,6 +21,7 @@ import { formatMoney } from './rgs/currency';
 import { modeInfo } from './game/gameInfo';
 import { readLaunchParams } from './rgs/params';
 import type { BetModeName } from './types/events';
+import { MODES } from './game/gameInfo';
 
 async function main(): Promise<void> {
   const params = readLaunchParams();
@@ -44,11 +45,29 @@ async function main(): Promise<void> {
 
   const backend = new WebAudioBackend((id) => assets.audioBuffer(id));
   const audio = new AudioManager(backend);
+  // forward declarations so the in-canvas panel can call into the round logic
+  let spinFn: () => void = () => {};
+  let skipFn: () => void = () => {};
+  let betStepFn: (d: -1 | 1) => void = () => {};
+  let modeStepFn: (d: -1 | 1) => void = () => {};
+  let helpFn: () => void = () => {};
+  let toggleTurboFn: () => boolean = () => false;
+
   const presenter = new PixiPresenter(app, audio, {
     getTexture: (sym) => assets.texture(sym),
     scenes: assets.sceneTextures(),
     rigParts: assets.rigParts(),
+    font: assets.font(),
+    ui: {
+      onSpin: () => spinFn(),
+      onSkip: () => skipFn(),
+      onHelp: () => helpFn(),
+      onToggleTurbo: () => toggleTurboFn(),
+      onBetStep: (d) => betStepFn(d),
+      onModeStep: (d) => modeStepFn(d),
+    },
   });
+  const panel = presenter.panel;
 
   const rgs = new MockRgs();
   const auth = await rgs.authenticate();
@@ -58,8 +77,7 @@ async function main(): Promise<void> {
   const buyPanel = new BuyPanel();
 
   // jurisdiction gating (identical rule to production main.ts)
-  const turboBtn = document.getElementById('turbo') as HTMLButtonElement;
-  if (auth.config.jurisdiction.disabledTurbo) turboBtn.style.display = 'none';
+  if (auth.config.jurisdiction.disabledTurbo) panel?.setTurboVisible(false);
 
   const currency = auth.balance.currency;
   let bet = auth.config.defaultBetLevel;
@@ -70,23 +88,26 @@ async function main(): Promise<void> {
   let player: BookPlayer | null = null;
 
   const $ = (id: string) => document.getElementById(id) as HTMLElement;
-  const setBal = (u: number) => { $('balance').textContent = formatMoney(u, currency); };
+  const BET_LEVELS = auth.config.betLevels;
+  let betIdx = Math.max(0, BET_LEVELS.indexOf(bet));
+
+  let balanceText = '';
+  const setBal = (u: number) => {
+    balanceText = formatMoney(u, currency);
+    panel?.setBalance(balanceText);
+  };
   const setCost = () => {
-    $('cost').textContent = formatMoney(Math.round(bet * modeInfo(mode).cost), currency);
+    panel?.setBet(formatMoney(Math.round(bet * modeInfo(mode).cost), currency));
+    panel?.setMode(t(modeInfo(mode).titleKey));
+    presenter.setMode(mode);
   };
 
-  // localise the static shell
-  $('spin').textContent = t('ui.spin');
-  $('skip').textContent = t('ui.skip');
-  turboBtn.textContent = t('ui.turbo');
-  $('helpBtn').textContent = t('ui.help');
-  $('lblBalance').textContent = t('ui.balance');
-  $('lblCost').textContent = t('ui.betcost');
-  $('lblReduced').textContent = t('ui.reduced');
+  // the control bar is inside the canvas and localised from the same catalogue
+  panel?.setLabels(t('ui.spin'), t('ui.skip'), t('ui.turbo'), t('ui.help'));
+  panel?.setCaptions(t('ui.bet'), t('ui.balance'));
 
   setBal(auth.balance.amount);
   setCost();
-  presenter.setMode(mode);
 
   window.addEventListener('resize', () => presenter.resize(app.renderer.width, app.renderer.height));
 
@@ -114,7 +135,7 @@ async function main(): Promise<void> {
     }
 
     busy = true;
-    ($('spin') as HTMLButtonElement).disabled = true;
+    panel?.setSpinEnabled(false);
     try {
       const res = await rgs.play(bet, mode);
       setBal(res.balance.amount);
@@ -130,36 +151,55 @@ async function main(): Promise<void> {
       setTimeout(() => { $('err').textContent = ''; }, 3000);
     } finally {
       busy = false;
-      ($('spin') as HTMLButtonElement).disabled = false;
+      panel?.setSpinEnabled(true);
       player = null;
     }
   }
 
   function doSkip(): void { presenter.skip = true; player?.skip(); }
 
-  $('spin').addEventListener('click', () => void spin());
-  $('skip').addEventListener('click', doSkip);
-  $('helpBtn').addEventListener('click', () => { help.render(); help.open(); });
-  turboBtn.addEventListener('click', () => {
+  spinFn = () => void spin();
+  skipFn = doSkip;
+  helpFn = () => { help.render(); help.open(); };
+  toggleTurboFn = () => {
     turbo = !turbo;
-    turboBtn.dataset.on = String(turbo);
     presenter.reduced = turbo || reducedWanted();   // turbo shortens presentation only
-  });
-  ($('mute') as HTMLInputElement).addEventListener('change', (e) => {
+    return turbo;
+  };
+  betStepFn = (d) => {
+    betIdx = Math.max(0, Math.min(BET_LEVELS.length - 1, betIdx + d));
+    bet = BET_LEVELS[betIdx];
+    setCost();
+  };
+  modeStepFn = (d) => {
+    const i = MODES.findIndex((m) => m.name === mode);
+    mode = MODES[(i + d + MODES.length) % MODES.length].name;
+    setCost();
+  };
+  ($('mute') as HTMLInputElement)?.addEventListener('change', (e) => {
     audio.setMuted((e.target as HTMLInputElement).checked);
-  });
-  ($('mode') as HTMLSelectElement).addEventListener('change', (e) => {
-    mode = (e.target as HTMLSelectElement).value as BetModeName;
-    presenter.setMode(mode); setCost();
-  });
-  ($('bet') as HTMLSelectElement).addEventListener('change', (e) => {
-    bet = Number((e.target as HTMLSelectElement).value); setCost();
   });
   window.addEventListener('keydown', (e) => {
     if (help.isOpen || buyPanel.isOpen) return;
     if (e.code === 'Space') { e.preventDefault(); void spin(); }
     if (e.key.toLowerCase() === 's') doSkip();
   });
+
+  /**
+   * Automation surface. The controls now live inside the canvas, where a test
+   * driver cannot click DOM nodes, so the same intents the panel invokes are
+   * also exposed here. Read-only state plus the identical callbacks — it adds
+   * no capability a player does not already have through the UI.
+   */
+  (globalThis as Record<string, unknown>).__ui = {
+    spin: () => spinFn(),
+    skip: () => skipFn(),
+    help: () => helpFn(),
+    idle: () => !busy,
+    balance: () => balanceText,
+    labels: () => ({ spin: t('ui.spin'), skip: t('ui.skip'), help: t('ui.help') }),
+    setMode: (m: BetModeName) => { mode = m; setCost(); },
+  };
 
   await loading.done();
 }
