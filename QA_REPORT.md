@@ -87,16 +87,36 @@ super_big=2098×, maxwin_*=15000×.
    1M+/mode (percentyle tail 1k–10k dla base/ante, trajektorie bankrolla).
 2. ✅ **Renderer** — PixiJS + panel Buy, help/paytable, loading, WebAudio, cząstki,
    i18n; przetestowany w przeglądarce (36/36).
-3. 🟡 **Assety/audio** — istnieją realne pliki: atlas 13 symboli, 3 tła scen, postać
-   (4 części rigu + animacja kośćmi), lobby tile, 14 plików OGG — razem ~887 kB,
-   preloadowane i wpięte w grę. Pozostaje: ilustracja malowana przez artystę 2D
-   oraz pliki Spine, jeśli studio ma licencję (`ART_BIBLE.md` §11, §13).
-4. 🟡 **Testy E2E z RGS** — wymagają mocka RGS (resume, saldo, błędy) — do dodania.
-5. 🟡 **Property‑based** — dodać testy typu Hypothesis (niezmienniki fuzji na losowych planszach).
-6. `books_bonus.jsonl.zst` ~17.5 MB — akceptowalne, ale przy 1M/mode rozważyć podział.
-7. **Skip w długiej rundzie bonusowej trwa ~10 s** (było: zawieszenie >40 s — naprawione
+3. 🟡 **Assety/audio** — istnieją realne pliki: atlas 13 symboli (przedmioty, nie
+   figury — `ART_BIBLE.md` §16), logo, 3 tła scen (plan daleki), postać
+   (4 części rigu + animacja kośćmi), lobby tile, 14 plików OGG — razem ~1.3 MB,
+   preloadowane i wpięte w grę. Plany **mid** i **near** tła rysują się
+   proceduralnie i przyjmują malowane pliki bez zmiany kodu (`ART_BIBLE.md` §17).
+   Pozostaje: ilustracja malowana przez artystę 2D oraz pliki Spine.
+4. 🟡 **Testy E2E z RGS** — autogra jest testowana przez mocka (12 checków),
+   ale resume rundy, błędy sieci i limity salda wymagają pełnego mocka RGS.
+5. 🔴 **Audio bez rytmu i melodii** — bedy to drony i akordy, brak warstwy
+   perkusyjnej i tematu. To słychać natychmiast obok gier topowych wydawców.
+6. 🟡 **Property‑based** — dodać testy typu Hypothesis (niezmienniki fuzji na losowych planszach).
+7. `books_bonus.jsonl.zst` ~17.5 MB — akceptowalne, ale przy 1M/mode rozważyć podział.
+8. **Skip w długiej rundzie bonusowej trwa ~10 s** (było: zawieszenie >40 s — naprawione
    przez synchroniczne rozwiązywanie tweenów przy aktywnym skipie). Do dalszej
    optymalizacji: batchowanie eventów zamiast sekwencyjnego await per event.
+
+## 4b. Autogra — wyniki (uruchomione)
+
+| Zestaw | Plik | Checków | Wynik |
+|---|---|---|---|
+| Logika limitów (deterministyczna) | `frontend/tests/autoplay_limits.mjs` | 18 | ✅ |
+| Autogra E2E przez mocka RGS | `frontend/tests/autoplay.mjs` | 12 | ✅ |
+| Renderer (mobile + desktop + pl) | `frontend/tests/smoke.mjs` | 36 | ✅ |
+
+Logika limitów jest transpilowana z `src/game/Autoplay.ts` i wykonywana wprost,
+więc arytmetyka limitów jest sprawdzana deterministycznie, a nie „przy okazji"
+losowego przebiegu. Pokryte: liczba rund, brak przekroczenia licznika, limit
+straty liczony **netto** (wygrana odsuwa limit), limit pojedynczej wygranej,
+stop na funkcji, stop gracza (runda w locie nadal się liczy, powód nie jest
+nadpisywany), pierwszeństwo powodów, oraz błąd rundy.
 
 ## 5. Rekomendacja QA
 

@@ -93,6 +93,19 @@ def defs() -> str:
     <stop offset="0.55" stop-color="#ff9422"/><stop offset="1" stop-color="#5c1f04"/>
   </radialGradient>
 
+  <!-- secondary materials: relics are not single-material objects. A hammer is
+       iron on ash, a sword is steel on wrapped leather. Overdrawing these on top
+       of the body gradient is what stops every symbol reading as "one shape,
+       one colour". -->
+  <linearGradient id="gWood" x1="0.15" y1="0" x2="0.85" y2="1">
+    <stop offset="0" stop-color="#a4763f"/><stop offset="0.34" stop-color="#7c5528"/>
+    <stop offset="0.72" stop-color="#4e3315"/><stop offset="1" stop-color="#2a1a0a"/>
+  </linearGradient>
+  <linearGradient id="gLeather" x1="0.15" y1="0" x2="0.85" y2="1">
+    <stop offset="0" stop-color="#6b4a2c"/><stop offset="0.4" stop-color="#4a3018"/>
+    <stop offset="1" stop-color="#22150a"/>
+  </linearGradient>
+
   <!-- specular sweep: a soft diagonal band of light -->
   <linearGradient id="sweep" x1="0" y1="0" x2="1" y2="1">
     <stop offset="0" stop-color="#ffffff" stop-opacity="0"/>
@@ -103,6 +116,12 @@ def defs() -> str:
   <linearGradient id="innerShade" x1="0.2" y1="0" x2="0.8" y2="1">
     <stop offset="0" stop-color="#000000" stop-opacity="0.02"/>
     <stop offset="1" stop-color="#000000" stop-opacity="0.42"/>
+  </linearGradient>
+  <!-- ore sits in shadow far harder than polished metal does -->
+  <linearGradient id="oreShade" x1="0.25" y1="0" x2="0.75" y2="1">
+    <stop offset="0" stop-color="#000000" stop-opacity="0"/>
+    <stop offset="0.5" stop-color="#000000" stop-opacity="0.22"/>
+    <stop offset="1" stop-color="#000000" stop-opacity="0.5"/>
   </linearGradient>
 
   <!-- rough rock texture for ore -->
@@ -140,8 +159,11 @@ ORE_FACETS = {
 
 def ore(shape: str, base: str, light: str, dark: str, seed: int) -> str:
     body = ORE_SHAPES[shape]
+    # Facets carry the whole read of a rough rock; at low opacity the turbulence
+    # texture flattens them out and every ore variant collapses into one brown
+    # blob, which is exactly what the drop-shadow-less fuel symbols must not do.
     facets = "".join(
-        f'<path d="{f}" fill="{light}" opacity="{0.30 - i * 0.09:.2f}"/>'
+        f'<path d="{f}" fill="{light}" opacity="{0.44 - i * 0.13:.2f}"/>'
         for i, f in enumerate(ORE_FACETS[shape]))
     # chipped edges: short strokes along the silhouette
     return f"""
@@ -154,10 +176,10 @@ def ore(shape: str, base: str, light: str, dark: str, seed: int) -> str:
     <path d="{body}" fill="{base}" filter="url(#rock)" opacity="0.92"/>
   </g>
   {facets}
-  <path d="{body}" fill="url(#innerShade)"/>
-  <path d="{body}" fill="none" stroke="{dark}" stroke-width="7" stroke-linejoin="round"/>
+  <path d="{body}" fill="url(#oreShade)"/>
+  <path d="{body}" fill="none" stroke="{dark}" stroke-width="8" stroke-linejoin="round"/>
   <path d="{body}" fill="none" stroke="{light}" stroke-width="2.5"
-        stroke-linejoin="round" opacity="0.34"/>
+        stroke-linejoin="round" opacity="0.5"/>
 </g>"""
 
 
@@ -170,9 +192,20 @@ def ore_clip(shape: str, seed: int) -> str:
 # --------------------------------------------------------------------------- #
 def relic(body: str, grad: str, rim: str, numeral: str, glow: float,
           ornament: str = "", nx: int = 128, ny: int = 172,
-          inset: str | None = None, halo: str = "haloWhite") -> str:
-    """Stack: halo -> shadow -> body -> inset plate -> ornament -> sweep -> rim."""
-    inset_path = inset or body
+          inset: str | None = None, halo: str = "haloWhite",
+          nsize: int = 60) -> str:
+    """Stack: halo -> shadow -> body -> form shade -> ornament -> sweep -> rim.
+
+    There is deliberately NO inset outline pass. A relic body is often several
+    subpaths (a hammer is head + haft, a sword is blade + guard + grip +
+    pommel), and stroking the body traced every subpath separately, cutting dark
+    rings through the middle of the object. Form now comes from the `innerShade`
+    gradient, which reads correctly however many parts the silhouette has.
+
+    Rim weights are kept low on purpose: a thick light outline is what makes
+    vector art look like a sticker rather than a forged object.
+    """
+    _ = inset
     # glow hugs the silhouette and stays inside the 256 cell
     return f"""
 <g>
@@ -181,19 +214,16 @@ def relic(body: str, grad: str, rim: str, numeral: str, glow: float,
     <path d="{body}" fill="#000000" transform="translate(3,7)"/>
   </g>
   <path d="{body}" fill="url(#{grad})"/>
-  <g opacity="0.55">
-    <path d="{inset_path}" fill="none" stroke="#000000" stroke-width="9"
-          transform="translate(0,3) scale(0.94)"
-          transform-origin="128 128" opacity="0.30"/>
-  </g>
+  <path d="{body}" fill="url(#innerShade)"/>
   {ornament}
-  <path d="{body}" fill="url(#sweep)" opacity="0.85"/>
-  <path d="{body}" fill="none" stroke="{rim}" stroke-width="6" stroke-linejoin="round"/>
-  <path d="{body}" fill="none" stroke="#ffffff" stroke-width="2"
-        stroke-linejoin="round" opacity="0.55"/>
-  <text x="{nx}" y="{ny}" font-family="Georgia,'Times New Roman',serif" font-size="60"
+  <path d="{body}" fill="url(#sweep)" opacity="0.42"/>
+  <path d="{body}" fill="none" stroke="{rim}" stroke-width="3.5"
+        stroke-linejoin="round" opacity="0.85"/>
+  <path d="{body}" fill="none" stroke="#ffffff" stroke-width="1.1"
+        stroke-linejoin="round" opacity="0.3"/>
+  <text x="{nx}" y="{ny}" font-family="Georgia,'Times New Roman',serif" font-size="{nsize}"
         font-weight="700" text-anchor="middle" fill="#120a04" opacity="0.55">{numeral}</text>
-  <text x="{nx}" y="{ny - 2}" font-family="Georgia,'Times New Roman',serif" font-size="60"
+  <text x="{nx}" y="{ny - 2}" font-family="Georgia,'Times New Roman',serif" font-size="{nsize}"
         font-weight="700" text-anchor="middle" fill="#ffffff" opacity="0.30">{numeral}</text>
 </g>"""
 
@@ -205,13 +235,42 @@ def rivets(points, r=7, col="#ffffff") -> str:
         for x, y in points)
 
 
-INGOT = ("M52,148 L80,96 L176,96 L204,148 L204,186 C204,198 194,206 182,206 "
-         "L74,206 C62,206 52,198 52,186 Z")
-BRACKET = "M42,46 L126,46 L126,138 L214,138 L214,216 L42,216 Z"
-PLATE = ("M128,28 L212,66 L212,148 C212,192 174,220 128,232 C82,220 44,192 44,148 "
-         "L44,66 Z")
-COIN = "M128,28 C183,28 228,73 228,128 C228,183 183,228 128,228 C73,228 28,183 28,128 C28,73 73,28 128,28 Z"
-CRYSTAL = "M128,20 L186,70 L212,150 L128,236 L44,150 L70,70 Z"
+# --------------------------------------------------------------------------- #
+# Silhouettes.
+#
+# Every relic is a RECOGNISABLE FORGE OBJECT, not a geometric plate with a
+# numeral on it. The ladder tells its own story at a glance — bar, hammer,
+# shield, chalice, sword, crown — and the shapes are deliberately different in
+# outline (wide/low, tall/narrow, round, pointed) so they separate peripherally
+# and at thumbnail size, before colour or rank mark is read.
+# --------------------------------------------------------------------------- #
+INGOT = ("M52,150 L82,98 L174,98 L204,150 L204,188 C204,200 194,208 182,208 "
+         "L74,208 C62,208 52,200 52,188 Z")
+INGOT_TOP = "M82,98 L174,98 L204,150 L52,150 Z"
+
+HAFT = ("M114,118 L142,118 L148,228 C148,234 143,238 137,238 L119,238 "
+        "C113,238 108,234 108,228 Z")
+HAMMER_HEAD = "M28,58 L74,68 L182,68 L228,58 L228,134 L182,124 L74,124 L28,134 Z"
+HAMMER = f"{HAMMER_HEAD} {HAFT}"
+
+SHIELD = ("M128,26 L216,60 L216,132 C216,184 178,216 128,234 "
+          "C78,216 40,184 40,132 L40,60 Z")
+
+CHALICE_BOWL = "M50,46 L206,46 C206,116 182,158 128,170 C74,158 50,116 50,46 Z"
+CHALICE_STEM = "M113,166 L143,166 L143,202 L113,202 Z"
+CHALICE_FOOT = ("M66,200 L190,200 C198,200 204,210 202,220 L200,232 L56,232 "
+                "L54,220 C52,210 58,200 66,200 Z")
+CHALICE = f"{CHALICE_BOWL} {CHALICE_STEM} {CHALICE_FOOT}"
+
+SWORD_BLADE = "M128,18 L150,60 L150,140 L106,140 L106,60 Z"
+SWORD_GUARD = "M58,140 L198,140 L204,150 L198,168 L58,168 L52,150 Z"
+SWORD_GRIP = "M112,168 L144,168 L144,202 L112,202 Z"
+# A round pommel as tall as it is wide turns the grip into a lollipop. A
+# flattened disc reads as a counterweight, which is what a pommel actually is.
+SWORD_POMMEL = ("M128,196 C147,196 159,204 159,214 C159,226 147,233 128,233 "
+                "C109,233 97,226 97,214 C97,204 109,196 128,196 Z")
+SWORD = f"{SWORD_BLADE} {SWORD_GUARD} {SWORD_GRIP} {SWORD_POMMEL}"
+
 CROWN_BODY = ("M38,198 L54,88 L92,138 L128,58 L164,138 L202,88 L218,198 "
               "C218,210 209,217 197,217 L59,217 C47,217 38,210 38,198 Z")
 FLUX_BODY = ("M128,24 C170,70 232,84 232,128 C232,172 170,186 128,232 "
@@ -219,58 +278,112 @@ FLUX_BODY = ("M128,24 C170,70 232,84 232,128 C232,172 170,186 128,232 "
 CINDER_BODY = ("M128,14 L154,94 L234,120 L154,146 L128,230 L102,146 L22,120 "
                "L102,94 Z")
 
+
+def wrap_lines(x0: int, x1: int, y0: int, y1: int, step: int,
+               col: str = "#150c05") -> str:
+    """Leather binding: short diagonals across a grip."""
+    return "".join(
+        f'<path d="M{x0},{y} L{x1},{y - 6}" stroke="{col}" stroke-width="3" '
+        f'opacity="0.55" fill="none"/>'
+        for y in range(y0, y1, step))
+
+
 SYMBOLS: list[tuple[str, str]] = [
-    ("O1", ore("shard", "#5f3d17", "#a4712f", "#241304", 1)),
-    ("O2", ore("cube", "#3b4430", "#71805f", "#161c10", 2)),
-    ("O3", ore("rhomb", "#632d1c", "#a05a3c", "#2a0f06", 3)),
-    ("O4", ore("hex", "#2d3a45", "#5f7186", "#111820", 4)),
-    ("O5", ore("nodule", "#59461a", "#9a8038", "#241b06", 5)),
+    ("O1", ore("shard", "#7a4f1e", "#c98d3f", "#241304", 1)),
+    ("O2", ore("cube", "#4d5a3f", "#8fa077", "#161c10", 2)),
+    ("O3", ore("rhomb", "#803a24", "#c8724c", "#2a0f06", 3)),
+    ("O4", ore("hex", "#3b4c5a", "#7b91a8", "#111820", 4)),
+    ("O5", ore("nodule", "#736023", "#c0a04a", "#241b06", 5)),
 
+    # I — a cast bronze bar, straight off the mould
     ("BRONZE", relic(
-        INGOT, "gBronze", "#e8c48c", "I", 0.30, halo="glowTight", ny=178,
-        ornament=('<path d="M80,96 L176,96 L188,120 L68,120 Z" fill="#ffffff" opacity="0.16"/>'
-                  + rivets([(74, 172), (182, 172)], 6, "#ffe9c2")))),
-
-    ("IRON", relic(
-        BRACKET, "gIron", "#dfe7ec", "II", 0.36, halo="glowTight", nx=170, ny=192,
-        ornament=('<rect x="58" y="60" width="52" height="62" rx="6" fill="#000000" opacity="0.16"/>'
-                  '<rect x="150" y="154" width="48" height="46" rx="6" fill="#000000" opacity="0.16"/>'
-                  + rivets([(84, 88), (84, 176), (182, 176)], 8)))),
-
-    ("SILVER", relic(
-        PLATE, "gSilver", "#ffffff", "III", 0.45, halo="glowTight",
-        ornament=('<path d="M128,52 L188,80 L188,144 C188,178 160,200 128,210 '
-                  'C96,200 68,178 68,144 L68,80 Z" fill="none" stroke="#5d6873" '
+        INGOT, "gBronze", "#e8c48c", "I", 0.22, halo="glowTight", ny=184, nsize=50,
+        ornament=(
+                  # the cast face is in shade; the sloped top catches the light.
+                  # Without this split the bar reads as a flat tag, not a solid.
+                  '<path d="M52,150 L204,150 L204,188 C204,200 194,208 182,208 '
+                  'L74,208 C62,208 52,200 52,188 Z" fill="#000000" opacity="0.28"/>'
+                  f'<path d="{INGOT_TOP}" fill="#fff0cf" opacity="0.30"/>'
+                  f'<path d="{INGOT_TOP}" fill="none" stroke="#3a2409" '
                   'stroke-width="4" opacity="0.5"/>'
-                  '<path d="M128,52 L188,80 L188,144 C188,178 160,200 128,210" '
-                  'fill="none" stroke="#ffffff" stroke-width="3" opacity="0.55"/>'
-                  + rivets([(128, 68), (86, 96), (170, 96)], 6)))),
+                  # cooling seam down the cast face
+                  '<path d="M128,150 L128,206" stroke="#3a2409" stroke-width="3" '
+                  'opacity="0.28" fill="none"/>'
+                  + rivets([(74, 178), (182, 178)], 6, "#ffe9c2")))),
 
+    # II — the smith's own hammer: iron head, ash haft, iron collar
+    ("IRON", relic(
+        HAMMER, "gIron", "#dfe7ec", "II", 0.26, halo="glowTight", ny=110, nsize=44,
+        ornament=(f'<path d="{HAFT}" fill="url(#gWood)"/>'
+                  '<path d="M120,132 L125,230 M133,130 L138,230" stroke="#2a1a0a" '
+                  'stroke-width="2.5" opacity="0.45" fill="none"/>'
+                  # collar clamping the head to the haft
+                  '<rect x="100" y="112" width="56" height="22" rx="7" fill="#8d979e"/>'
+                  '<rect x="100" y="112" width="56" height="9" rx="4" fill="#ffffff" '
+                  'opacity="0.42"/>'
+                  # recessed cheek of the head
+                  '<rect x="80" y="80" width="96" height="34" rx="9" fill="#000000" '
+                  'opacity="0.20"/>'
+                  # worn striking faces catch the forge light
+                  '<path d="M28,58 L46,63 L46,129 L28,134 Z" fill="#ffffff" opacity="0.20"/>'
+                  '<path d="M228,58 L210,63 L210,129 L228,134 Z" fill="#ffffff" opacity="0.14"/>'
+                  + rivets([(60, 96), (196, 96)], 8)))),
+
+    # III — a heater shield, bronze-banded, with a struck boss
+    ("SILVER", relic(
+        SHIELD, "gSilver", "#e8eef3", "III", 0.32, halo="glowTight", ny=190, nsize=44,
+        ornament=('<rect x="40" y="98" width="176" height="30" fill="#8d6b3c" '
+                  'opacity="0.55"/>'
+                  '<rect x="40" y="98" width="176" height="8" fill="#f0cf9c" '
+                  'opacity="0.40"/>'
+                  '<circle cx="128" cy="113" r="27" fill="#c7d0d8"/>'
+                  '<circle cx="128" cy="113" r="27" fill="none" stroke="#5d6873" '
+                  'stroke-width="4"/>'
+                  '<circle cx="121" cy="105" r="10" fill="#ffffff" opacity="0.55"/>'
+                  # planked face + edge binding
+                  '<path d="M84,44 L84,214 M172,44 L172,214" stroke="#5d6873" '
+                  'stroke-width="3" opacity="0.32" fill="none"/>'
+                  + rivets([(56, 74), (200, 74), (128, 214)], 6)))),
+
+    # IV — a gold chalice brimming with molten metal
     ("GOLD", relic(
-        COIN, "gGold", "#fff2c4", "IV", 0.60, halo="glowTight",
-        ornament=('<circle cx="128" cy="128" r="84" fill="none" stroke="#7d5410" '
-                  'stroke-width="6" opacity="0.55"/>'
-                  '<circle cx="128" cy="128" r="84" fill="none" stroke="#fff2c4" '
-                  'stroke-width="2.5" opacity="0.5"/>'
-                  '<circle cx="128" cy="128" r="66" fill="none" stroke="#7d5410" '
-                  'stroke-width="3" opacity="0.4"/>'
-                  # laurel ticks around the rim
-                  + "".join(
-                      f'<rect x="126" y="34" width="4" height="14" rx="2" fill="#7d5410" '
-                      f'opacity="0.5" transform="rotate({a} 128 128)"/>'
-                      for a in range(0, 360, 30))))),
+        CHALICE, "gGold", "#fff2c4", "IV", 0.45, halo="glowTight", ny=124, nsize=46,
+        ornament=('<ellipse cx="128" cy="52" rx="72" ry="13" fill="#fff2c4" '
+                  'opacity="0.55"/>'
+                  '<path d="M50,46 L206,46 L204,68 L52,68 Z" fill="#ffffff" '
+                  'opacity="0.20"/>'
+                  '<path d="M62,78 C92,110 164,110 194,78" fill="none" stroke="#7d5410" '
+                  'stroke-width="4" opacity="0.45"/>'
+                  '<circle cx="88" cy="92" r="9" fill="#fff6d0" opacity="0.85"/>'
+                  '<circle cx="168" cy="92" r="9" fill="#fff6d0" opacity="0.85"/>'
+                  f'<path d="{CHALICE_STEM}" fill="#000000" opacity="0.18"/>'
+                  '<circle cx="128" cy="184" r="13" fill="#ff9422"/>'
+                  '<circle cx="128" cy="184" r="13" fill="none" stroke="#7d5410" '
+                  'stroke-width="3"/>'
+                  '<path d="M66,206 L190,206" stroke="#7d5410" stroke-width="4" '
+                  'opacity="0.45" fill="none"/>'))),
 
+    # V — a mythril blade: fullered steel, wrapped grip, gem pommel
     ("MYTHRIL", relic(
-        CRYSTAL, "gMythril", "#c8fff2", "V", 0.70, halo="glowWide",
-        ornament=('<path d="M128,20 L128,236 M70,70 L212,150 M186,70 L44,150" '
-                  'stroke="#eafffb" stroke-width="2.5" opacity="0.45" fill="none"/>'
-                  '<path d="M128,64 L176,96 L160,164 L128,190 L96,164 L80,96 Z" '
-                  'fill="#ffffff" opacity="0.18"/>'
-                  '<path d="M128,64 L176,96 L160,164 L128,190 L96,164 L80,96 Z" '
-                  'fill="none" stroke="#f2fffc" stroke-width="2" opacity="0.5"/>'))),
+        SWORD, "gMythril", "#c8fff2", "V", 0.58, halo="glowWide", ny=118, nsize=40,
+        ornament=(f'<path d="{SWORD_GRIP}" fill="url(#gLeather)"/>'
+                  + wrap_lines(112, 144, 176, 202, 8)
+                  + '<path d="M128,36 L128,132" stroke="#0d5548" stroke-width="8" '
+                  'opacity="0.40" fill="none"/>'
+                  '<path d="M128,36 L128,132" stroke="#f2fffc" stroke-width="2.5" '
+                  'opacity="0.55" fill="none"/>'
+                  # bevel down the near edge of the blade
+                  '<path d="M128,18 L150,60 L150,140 L128,140 Z" fill="#000000" '
+                  'opacity="0.14"/>'
+                  f'<path d="{SWORD_GUARD}" fill="#ffffff" opacity="0.10"/>'
+                  '<path d="M58,140 L198,140 L200,148 L56,148 Z" fill="#ffffff" '
+                  'opacity="0.30"/>'
+                  '<circle cx="128" cy="214" r="10" fill="#eafffb" opacity="0.92"/>'
+                  '<circle cx="128" cy="214" r="10" fill="none" stroke="#0d5548" '
+                  'stroke-width="2.5" opacity="0.7"/>'))),
 
     ("CROWN", relic(
-        CROWN_BODY, "gCrown", "#ffb347", "", 0.85, halo="glowWide", ny=999,
+        CROWN_BODY, "gCrown", "#ffb347", "", 0.75, halo="glowWide", ny=999,
         ornament=(
             # molten seams running down the crown
             '<path d="M92,138 L96,208 M128,58 L128,206 M164,138 L160,208" '
@@ -307,7 +420,9 @@ SYMBOLS: list[tuple[str, str]] = [
   <path d="{CINDER_BODY}" fill="url(#gCinder)"/>
   <path d="M128,58 L142,112 L196,120 L142,128 L128,186 L114,128 L60,120 L114,112 Z"
         fill="#fff6de" opacity="0.5"/>
-  <circle cx="128" cy="120" r="30" fill="#fffdf4" opacity="0.9" filter="url(#bloomS)"/>
+  <!-- `bloomS` was never declared; an SVG element referencing a missing filter
+       is not rendered at all, so the scatter's hot core was silently absent. -->
+  <circle cx="128" cy="120" r="30" fill="#fffdf4" opacity="0.9" filter="url(#glowTight)"/>
   <path d="{CINDER_BODY}" fill="none" stroke="#ffe3a0" stroke-width="5"/>
   <path d="{CINDER_BODY}" fill="none" stroke="#ffffff" stroke-width="1.8" opacity="0.55"/>
 </g>"""),

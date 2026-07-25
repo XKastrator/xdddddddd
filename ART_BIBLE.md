@@ -279,3 +279,48 @@ sprite'a grafiki, więc nie walczy z tweenami kontenera (wciągnięcie przy fuzj
 squash, puls przy wygranej).
 
 **Wszystko wyłączane przy `reduced motion`.**
+
+---
+
+## 16. Symbole jako przedmioty, nie figury geometryczne
+
+Pierwsza wersja atlasu opierała się na abstrakcyjnych bryłach (wspornik, płyta,
+moneta). Czytały się jako „kształt z cyfrą”, nie jako łup z kuźni. Drabina rang
+to teraz **rozpoznawalne przedmioty o wyraźnie różnych sylwetkach**, tak by
+rozróżniać je peryferyjnie i w miniaturze, zanim odczyta się kolor czy cyfrę:
+
+| Ranga | Przedmiot | Sylwetka |
+|---|---|---|
+| I Brąz | sztaba odlewnicza | niska, szeroka, skos u góry |
+| II Żelazo | młot kowalski | poprzeczna głowica + pionowe stylisko |
+| III Srebro | tarcza | pionowa, zwężona ku dołowi |
+| IV Złoto | kielich | okrągła czasza na nóżce |
+| V Mithril | miecz | wąski, pionowy, z jelcem |
+| VI Korona | korona | zębata, rozłożysta |
+
+Trzy zasady, które to trzymają razem:
+
+1. **Wielomateriałowość.** Młot to żelazo *na jesionie*, miecz to stal *na
+   owijanej skórze* (`gWood`, `gLeather`). Jednolity materiał to główny powód,
+   dla którego symbol wektorowy wygląda na niedokończony.
+2. **Brak obrysu wewnętrznego.** Ciało relikwii bywa kilkoma subpath'ami;
+   obrysowywanie go przecinało ciemne pierścienie przez środek przedmiotu.
+   Formę daje gradient `innerShade`, który działa niezależnie od liczby części.
+3. **Cienki rant.** Gruby jasny kontur = naklejka. Rant 3.5 px + włos 1.1 px.
+
+## 17. Sloty na malowaną grafikę (co podmienić bez zmiany kodu)
+
+Tło jest **stosem paralaksy** (`Background.ts`), nie jedną tapetą. Każdy plan
+przyjmuje malowany plik; gdy go nie ma, plan rysuje się proceduralnie.
+
+| Plik | Plan | Rozmiar | Format | Co ma zawierać |
+|---|---|---|---|---|
+| `scene_{base,bonus,super}.jpg` | **far** | 1024×1024+ | JPEG (bez alfy) | sama jaskinia: gradient, żyły lawy, iskry. **Bez** kolumn, bez winiety |
+| `scene_{…}_mid.png` | **mid** | 1024×1024+ | PNG z alfą | architektura: kolumny, głowice, łuk sklepienia |
+| `scene_{…}_near.png` | **near** | 1024×1024+ | PNG z alfą | pierwszy plan: próg podłogi, łańcuchy, kosze z żarem |
+| `atlas.png` + `atlas.json` | — | 256 px/komórkę | PNG z alfą | 13 symboli, światło z lewej góry |
+| `logo.png` | — | ~1024×540 | PNG z alfą | wordmark; skalowany do pasma nad ramą |
+| `character.png` + `.json` | — | — | PNG z alfą | części rigu z pivotami (`Rig.ts`) |
+
+Winieta i poświata podłogi są generowane w kodzie z gradientów radialnych i
+**nie powinny być wypalane w plikach** — inaczej podwoją się.

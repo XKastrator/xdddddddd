@@ -4,7 +4,7 @@
  * NO game maths. Symbol artwork comes from the texture atlas (see ART_BIBLE.md);
  * a procedural fallback keeps the game runnable without binary assets.
  */
-import { Application, Container } from 'pixi.js';
+import { Application, Container, Sprite } from 'pixi.js';
 import type { Presenter } from '../game/Presenter';
 import type { Board, Fusion, Relic, Spawned, SpinKind } from '../types/events';
 import { Sym } from '../types/events';
@@ -17,7 +17,8 @@ import { tween, wait } from './tween';
 import { Particles } from './Particles';
 import { CoinShower, shake } from './juice';
 import { HeatHazeFilter, ShimmerFilter, ChromaticFilter } from './filters';
-import { Background } from './Background';
+import { Background, type SceneTextures } from './Background';
+import { ReelFrame, BAND } from './ReelFrame';
 import { Rig, EMBERWRIGHT_BONES, type PartTextures } from './Rig';
 import type { AudioManager } from '../audio/AudioManager';
 import type { TextureProvider } from './SymbolSprite';
@@ -27,9 +28,10 @@ import type { Texture } from 'pixi.js';
 
 export interface PresenterAssets {
   getTexture?: TextureProvider;
-  scenes?: Partial<Record<'base' | 'bonus' | 'super', Texture>>;
+  scenes?: SceneTextures;
   rigParts?: PartTextures;
   font?: GlyphFont | null;
+  logo?: Texture | null;
   ui?: UiCallbacks;
 }
 
@@ -41,6 +43,8 @@ export class PixiPresenter implements Presenter {
   private world = new Container();
   private rig: Rig | null = null;
   private rigHolder = new Container();
+  private frame: ReelFrame;
+  private logo: Sprite | null = null;
   private board: BoardView;
   private heatMeter: HeatMeter;
   private banner: WinBanner;
@@ -69,8 +73,18 @@ export class PixiPresenter implements Presenter {
     }
     this.banner = new WinBanner(assets.font ?? null);
     this.heatMeter = new HeatMeter(this.board.width2, 14, assets.font ?? null);
-    this.heatMeter.position.set(0, -30);
-    this.world.addChild(this.heatMeter, this.board, this.fx);
+    // The gauge moved BELOW the grid: the band above the board now carries the
+    // frame's cartouche, and stacking both there made the two fight for the same
+    // 30 units. Board-local, so this constant holds at every layout.
+    this.heatMeter.position.set(0, this.board.height2 + BASE_GAP * BAND + 14);
+    // The housing lives in the same scaled container as the grid and is drawn
+    // in board-local coordinates, so it tracks every layout for free.
+    this.frame = new ReelFrame(assets.font ?? null);
+    this.world.addChild(this.frame, this.heatMeter, this.board, this.fx);
+    if (assets.logo) {
+      this.logo = new Sprite(assets.logo);
+      this.logo.anchor.set(0.5, 0);
+    }
 
     // The HUD uses the authored display face; falling back to the OS font is
     // exactly the tell we are removing, so a missing atlas hides the HUD text
@@ -98,8 +112,20 @@ export class PixiPresenter implements Presenter {
     this.world.filters = [this.shimmer];
     app.stage.filters = [this.chroma];
     app.stage.addChild(this.bg, this.rigHolder, this.world, this.coins, this.hud);
+    if (this.logo) app.stage.addChild(this.logo);
     if (this.panel) app.stage.addChild(this.panel);
     app.stage.addChild(this.banner);
+
+    this.frame.layout(this.board.width2, this.board.height2, BASE_GAP);
+    this.frame.setTitle('THE DEEPFORGE');
+
+    // pointer parallax: the room shifts against the camera on desktop
+    app.stage.eventMode = 'static';
+    app.stage.on('globalpointermove', (e) => {
+      const w = app.renderer.width, h = app.renderer.height;
+      this.bg.setPointer((e.global.x / w) * 2 - 1, (e.global.y / h) * 2 - 1);
+    });
+
     this.resize(app.renderer.width, app.renderer.height);
     this.showIdleBoard();
 
@@ -150,28 +176,57 @@ export class PixiPresenter implements Presenter {
 
   /** Heat drives how hard the room shimmers — the forge visibly cooks. */
   private setHazeFromHeat(heat: number, cap: number): void {
-    this.haze.strength = this.reduced ? 0 : Math.min(1, heat / cap) * 1.6 + 0.25;
+    const t = Math.min(1, heat / cap);
+    this.haze.strength = this.reduced ? 0 : t * 1.6 + 0.25;
+    // the housing runs hot too, so the frame is part of the round, not furniture
+    this.frame.setHeat(t);
   }
 
   resize(w: number, h: number): void {
-    this.bg.resize(w, h);
     // the control bar owns the bottom of the stage; the board gets what is left
     const panelH = this.panel ? this.panel.layout(w, h) : 0;
     const playH = h - panelH;
+    // the room composes inside the PLAY area, so the floor and the braziers are
+    // not buried behind the control bar
+    this.bg.resize(w, playH, h);
 
-    const lay = computeLayout(w, playH, COLS, ROWS);
+    // the housing and the gauge below it are drawn outside the board rect, so
+    // the layout has to buy that space back out of the available area
+    const lay = computeLayout(w, playH, COLS, ROWS, BAND + 1.5);
     const scale = lay.cell / BASE_CELL;
     this.world.scale.set(scale);
     this.world.position.set(lay.boardX, lay.boardY);
 
+    // the glyph face draws upward from its baseline, so the top row needs a
+    // full line of clearance or the caps are cut off by the stage edge
     const pad = Math.round(Math.min(w, playH) * 0.05);
-    this.lblMode.position.set(pad, pad * 0.6);
-    this.lblTotal.position.set(pad, pad * 0.6 + 26);
-    this.lblSpinWin.position.set(w - pad, pad * 0.6);
-    this.lblSpins.position.set(w - pad, pad * 0.6 + 22);
-    this.lblVault.position.set(w - pad, pad * 0.6 + 42);
+    const top = Math.max(20, pad * 0.75);
+    this.lblMode.position.set(pad, top);
+    this.lblTotal.position.set(pad, top + 28);
+    this.lblSpinWin.position.set(w - pad, top);
+    this.lblSpins.position.set(w - pad, top + 22);
+    this.lblVault.position.set(w - pad, top + 42);
     this.banner.resize(w, playH);
-    this.placeRig(w, playH, lay.boardX, lay.boardY, lay.boardH ?? 0);
+    this.placeRig(w, playH, lay.boardX, lay.boardY, lay.boardH);
+    this.placeLogo(w, playH, lay.boardY);
+  }
+
+  /**
+   * The wordmark sits in the band above the housing. It is sized by the space
+   * actually left over rather than by stage width, and it stands down entirely
+   * when the board has crowded that band out — a clipped logo is worse than no
+   * logo.
+   */
+  private placeLogo(w: number, h: number, boardY: number): void {
+    if (!this.logo) return;
+    const tex = this.logo.texture;
+    const room = boardY - BAND * 1.6 * (this.world.scale.x * BASE_GAP) - 6;
+    const maxH = Math.min(room * 0.82, h * 0.13, 104);
+    if (maxH < 26) { this.logo.visible = false; return; }
+    this.logo.visible = true;
+    const s = Math.min(maxH / tex.height, (w * 0.5) / tex.width);
+    this.logo.scale.set(s);
+    this.logo.position.set(w / 2, Math.max(2, (room - tex.height * s) / 2));
   }
 
   /**
@@ -256,6 +311,7 @@ export class PixiPresenter implements Presenter {
     this.kind = kind;
     this.heatMeter.setCap(HEAT_CAP[kind]);
     this.lblMode.text = mode === 'molten_core' ? 'MOLTEN CORE' : 'FORGE FURY';
+    this.frame.setTitle(this.lblMode.text);
     if (mode === 'molten_core') this.lblVault.text = 'VAULT 0.00×';
     this.lblSpins.text = `SPINS ${spins}`;
     this.audio?.enterState(mode === 'molten_core' ? 'super' : 'bonus');
@@ -328,6 +384,8 @@ export class PixiPresenter implements Presenter {
 
   async roundEnd(): Promise<void> {
     // the round is over: the forge cools back to its resting scene
+    this.frame.setTitle('THE DEEPFORGE');
+    this.frame.setHeat(0);
     await this.bg.to('base', this.ctx);
   }
 

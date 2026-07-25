@@ -33,7 +33,13 @@
 - [x] `socialCasino` → waluty XGC/XSC, brak sugestii gwarantowanej wygranej ✅ (design)
 - [x] Help screen pokazuje **RTP i max win** ✅ zaimplementowany (`ui/HelpScreen.ts`) i zweryfikowany testem przeglądarkowym
 - [x] Widoczny komunikat „każdy spin niezależny i losowy” ✅ w help screen i w panelu Buy
-- [ ] Integracja limitów sesji/straty operatora 🟡 (M6)
+- [x] **Autogra z limitami** ✅ zaimplementowana i przetestowana (`game/Autoplay.ts`,
+      `ui/AutoplayPanel.ts`): liczba rund ustawiana **przed** startem, limit straty
+      (netto), limit pojedynczej wygranej, stop przy uruchomieniu funkcji,
+      zatrzymanie w dowolnym momencie ze skutkiem po bieżącej rundzie.
+      Zakład i tryb są zablokowane na czas sekwencji; zakup funkcji nie podlega
+      autogrze. 18 deterministycznych checków logiki + 12 checków E2E.
+- [ ] Integracja limitów sesji/straty **operatora** (poza grą, po stronie RGS) 🟡 (M6)
 
 ## 4. Zasady briefu — zakazy (twarde) ✅
 
@@ -70,6 +76,12 @@
 - [x] Skalowanie UI, strefy dotyku ≥44px ✅ (design)
 - [x] Skip animacji bez zmiany wyniku ✅
 - [x] Localization‑ready: `i18n/strings.ts` sterowane `lang` z RGS (en/pl/de gotowe, RTL‑ready) ✅; pozostałe języki = kolejne słowniki 🟡
+- [x] Pasek kontrolek w canvasie: okrągły przycisk główny, ikony rysowane (bez
+      zależności od kroju), stany hover/press/disabled, pola dotyku ≥44 px
+      niezależnie od rozmiaru rysunku ✅
+- [ ] Historia gry, menu ustawień, suwaki głośności, siatka zakładów, quick spin,
+      podsumowanie rundy 🔴 — brakujące funkcje produktowe (nie blokują
+      certyfikacji, ale odstają od poziomu topowych wydawców)
 
 ## 8. Matematyka ✅
 
@@ -83,7 +95,10 @@
 ## 9. Produkcja (poza repo) ⬜
 
 - [x] Renderer PixiJS ✅ (M3 + M3+: Buy panel, help, loading, audio, cząstki, i18n)
-- [ ] Finalne assety + audio (M5)
+- [x] Symbole jako rozpoznawalne przedmioty, logo jako osobny asset, kuta rama
+      bębnów z kartuszem, tło jako stos paralaksy far/mid/near ✅ (ART_BIBLE §16–17)
+- [ ] Malowana ilustracja 2D (postać, plany mid/near) — sloty gotowe, pliki do podmiany (M5)
+- [ ] Audio z rytmem i melodią 🔴 — obecnie drony i akordy (M5)
 - [ ] Testy urządzeń, audyt niezależny, soft‑launch (M7)
 
 ---
@@ -93,7 +108,12 @@
 Warstwa **math + kontrakt + format publikacji + renderer** jest **zgodna i kompletna**
 w granicach tego środowiska (✅) — łącznie z wymogami widoczności RTP/max win
 (help screen), potwierdzenia przed zakupem trybu, dostępności i localization‑ready UI;
-wszystko zweryfikowane realnym uruchomieniem (36/36 checków przeglądarkowych).
+wszystko zweryfikowane realnym uruchomieniem (**66/66** checków: 18 logiki limitów
+autogry, 36 renderera na mobile/desktop/pl, 12 autogry E2E przez mocka RGS).
+
+Brak autogry z limitami był **blokadą certyfikacyjną** i został zamknięty.
+Otwarte pozostają: malowana ilustracja 2D, audio z rytmem i melodią, funkcje
+produktowe z §7 oraz skala symulacji 1M/mode.
 Do publikacji produkcyjnej pozostają kroki oznaczone 🟡/⬜ (finalne assety/audio,
 skala 1M/mode, testy E2E z RGS, limity operatora) — zebrane w `IMPLEMENTATION_PLAN.md`.
 Nie zadeklarowano jako „zrobione” niczego, co nie zostało faktycznie uruchomione.

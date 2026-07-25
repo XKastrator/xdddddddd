@@ -111,41 +111,44 @@ def embers(n: int, col: str, y0: int, seed: int = 3) -> str:
     return "".join(out)
 
 
+# --------------------------------------------------------------------------- #
+# These files are the FAR plane only.
+#
+# The room's architecture (pillars), its foreground (floor lip, anvil, chains)
+# and the vignette are drawn as separate, independently-parallaxing planes by
+# frontend/src/render/Background.ts. Baking them into this image would flatten
+# the scene back into a single sheet of wallpaper and double the vignette.
+#
+# `pillars()` and `anvil()` are kept because the same silhouettes are reused by
+# the lobby tile and by anyone regenerating a flat single-plane scene.
+# --------------------------------------------------------------------------- #
 def scene_base() -> str:
     return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}">
   {sky('#0a0806', '#140f0a', '#20130a', '#ff7a18', 0.30)}
-  {pillars('#0d0a07', 0.9)}
   {lava_cracks(CRACKS_A, '#ff7a18', 0.55, 14)}
-  {anvil(512, 856, 1.25, '#080605', '#ff9a3c')}
   {embers(46, '#ffb347', 520)}
-  <rect width="{W}" height="{H}" fill="url(#vignette)"/>
 </svg>"""
 
 
 def scene_bonus() -> str:
     return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}">
   {sky('#120a05', '#25130a', '#3a1c08', '#ff7a18', 0.55)}
-  {pillars('#120b07', 0.85)}
   {lava_cracks(CRACKS_B, '#ff8c22', 0.8, 18)}
   <ellipse cx="512" cy="1010" rx="470" ry="130" fill="#ff9a3c" opacity="0.35"
            filter="url(#blur40)"/>
-  {anvil(512, 852, 1.3, '#0a0706', '#ffc06a')}
   {embers(90, '#ffcf8a', 380)}
-  <rect width="{W}" height="{H}" fill="url(#vignette)"/>
 </svg>"""
 
 
 def scene_super() -> str:
     return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}">
   {sky('#1b0d05', '#3d1a07', '#7a2f05', '#ffb347', 0.75)}
-  {pillars('#170c06', 0.75)}
   <ellipse cx="512" cy="1000" rx="520" ry="180" fill="#ff9a3c" opacity="0.55"
            filter="url(#blur40)"/>
   <ellipse cx="512" cy="1020" rx="360" ry="120" fill="#fff0c0" opacity="0.45"
            filter="url(#blur40)"/>
   {lava_cracks(CRACKS_B, '#ffc46a', 0.95, 22)}
   {embers(140, '#ffe3ab', 240)}
-  <rect width="{W}" height="{H}" fill="url(#vignette)" opacity="0.8"/>
 </svg>"""
 
 

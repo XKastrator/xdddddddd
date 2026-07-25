@@ -41,15 +41,18 @@ export interface RigMeta {
 
 import { GlyphFont, type FontMeta } from '../render/GlyphText';
 
+import type { SceneArt, SceneTextures } from '../render/Background';
+
 export type SceneName = 'base' | 'bonus' | 'super';
 const SCENES: SceneName[] = ['base', 'bonus', 'super'];
 
 export class AssetLoader {
   private textures = new Map<Sym, Texture>();
   private audio = new Map<string, ArrayBuffer>();
-  private scenes: Partial<Record<SceneName, Texture>> = {};
+  private scenes: SceneTextures = {};
   private parts: Record<string, { texture: Texture; pivot: { x: number; y: number } }> = {};
   private glyphFont: GlyphFont | null = null;
+  private logoTex: Texture | null = null;
   /** Non-fatal load problems, surfaced by the boot diagnostics. */
   readonly warnings: string[] = [];
   loaded = false;
@@ -72,8 +75,8 @@ export class AssetLoader {
 
   /** `onProgress` receives 0..1 across the whole asset set. */
   async load(base = AssetLoader.defaultBase(), onProgress?: (p: number) => void): Promise<void> {
-    // meta + atlas + character + 3 scenes + audio
-    const steps = 3 + 1 + SCENES.length + AUDIO_IDS.length;
+    // meta + atlas + font + character + logo + 3 scenes + audio
+    const steps = 3 + 2 + SCENES.length + AUDIO_IDS.length;
     let done = 0;
     const tick = () => onProgress?.(++done / steps);
 
@@ -123,10 +126,23 @@ export class AssetLoader {
     } catch (e) { this.warnings.push(`character rig unavailable (${String(e)})`); }
     tick();
 
-    // scenes — optional, Background falls back to a painted gradient
+    // wordmark — optional, the title card falls back to glyph text
+    try { this.logoTex = await Assets.load(`${base}logo.png`); }
+    catch (e) { this.warnings.push(`logo unavailable (${String(e)})`); }
+    tick();
+
+    // Scenes are LAYERED: `scene_x.jpg` is the far plane, and the mid/near
+    // planes are optional painted overrides for what Background otherwise draws
+    // procedurally. Every one of the three is independently optional.
     await Promise.all(SCENES.map(async (name) => {
-      try { this.scenes[name] = await Assets.load(`${base}scene_${name}.jpg`); }
-      catch { /* keep going */ }
+      const art: SceneArt = {};
+      const tryLoad = async (file: string): Promise<Texture | undefined> => {
+        try { return await Assets.load(`${base}${file}`); } catch { return undefined; }
+      };
+      art.far = await tryLoad(`scene_${name}.jpg`);
+      art.mid = await tryLoad(`scene_${name}_mid.png`);
+      art.near = await tryLoad(`scene_${name}_near.png`);
+      this.scenes[name] = art;
       tick();
     }));
 
@@ -144,8 +160,9 @@ export class AssetLoader {
 
   texture(sym: Sym): Texture | undefined { return this.textures.get(sym); }
   audioBuffer(id: string): ArrayBuffer | undefined { return this.audio.get(id); }
-  sceneTextures(): Partial<Record<SceneName, Texture>> { return this.scenes; }
+  sceneTextures(): SceneTextures { return this.scenes; }
   font(): GlyphFont | null { return this.glyphFont; }
+  logo(): Texture | null { return this.logoTex; }
   rigParts(): Record<string, { texture: Texture; pivot: { x: number; y: number } }> {
     return this.parts;
   }

@@ -27,8 +27,26 @@ export class BoardView extends Container {
     this.cols = cols; this.rows = rows; this.cell = cell; this.gap = gap;
     const w = cols * cell + (cols + 1) * gap;
     const h = rows * cell + (rows + 1) * gap;
-    this.bg.roundRect(0, 0, w, h, gap * 1.6).fill({ color: THEME.panel })
-      .roundRect(0, 0, w, h, gap * 1.6).stroke({ width: 2, color: THEME.line });
+    this.bg.roundRect(0, 0, w, h, gap * 1.6).fill({ color: 0x0e0a07 });
+    // Per-cell wells. Without them the recess is one flat rectangle and the
+    // symbols read as stickers floating on a panel; a shallow inset behind each
+    // one gives the grid structure and makes a gap in a fused group visible.
+    const r = gap * 1.1;
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const x = gap + col * (cell + gap);
+        const y = gap + row * (cell + gap);
+        this.bg.roundRect(x, y, cell, cell, r).fill({ color: 0x171009 });
+        // light catches the top lip, shadow gathers along the bottom
+        this.bg.roundRect(x, y, cell, cell * 0.5, r)
+          .fill({ color: 0xffffff, alpha: 0.022 });
+        this.bg.roundRect(x + 0.5, y + 0.5, cell - 1, cell - 1, r)
+          .stroke({ width: 1, color: 0x000000, alpha: 0.55 });
+        this.bg.moveTo(x + r, y + 0.5).lineTo(x + cell - r, y + 0.5)
+          .stroke({ width: 1, color: 0x5a462c, alpha: 0.35 });
+      }
+    }
+    this.bg.roundRect(0, 0, w, h, gap * 1.6).stroke({ width: 2, color: THEME.line });
     this.addChild(this.bg);
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {

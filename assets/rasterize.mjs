@@ -30,6 +30,7 @@ const JOBS = [
   { page: 'atlas.html', out: 'atlas.png', meta: 'atlas.json', type: 'png' },
   { page: 'character.html', out: 'character.png', meta: 'character.json', type: 'png' },
   { page: 'font.html', out: 'font.png', meta: 'font.json', type: 'png' },
+  { page: 'logo.html', out: 'logo.png', type: 'png' },
   { page: 'scene_base.html', out: 'scene_base.jpg', type: 'jpeg', quality: 82 },
   { page: 'scene_bonus.html', out: 'scene_bonus.jpg', type: 'jpeg', quality: 82 },
   { page: 'scene_super.html', out: 'scene_super.jpg', type: 'jpeg', quality: 82 },

@@ -11,8 +11,8 @@
     "preview": "vite preview",
     "devbooks": "python3 src/dev/make_devbooks.py",
     "player": "python3 player/build_player.py && echo 'open frontend/player/index.html'",
-    "assets": "python3 ../assets/generate_art.py && python3 ../assets/generate_scenes.py && python3 ../assets/generate_character.py && node ../assets/rasterize.mjs && python3 ../assets/generate_audio.py",
-    "test": "node tests/smoke.mjs"
+    "assets": "python3 ../assets/generate_art.py && python3 ../assets/generate_scenes.py && python3 ../assets/generate_character.py && python3 ../assets/generate_font.py && python3 ../assets/generate_logo.py && node ../assets/rasterize.mjs && python3 ../assets/generate_audio.py",
+    "test": "node tests/autoplay_limits.mjs && node tests/smoke.mjs && node tests/autoplay.mjs"
   },
   "devDependencies": {
     "playwright": "^1.61.1",

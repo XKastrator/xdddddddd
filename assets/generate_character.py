@@ -27,8 +27,8 @@ OUT = Path(__file__).resolve().parent / "build"
 CELL = 512          # generous: the cloak is tall
 COLS = 2
 
-CLOAK_D = "#100b08"      # cloak base (near-silhouette)
-CLOAK_L = "#241812"      # lit fold
+CLOAK_D = "#1d1410"      # cloak base (near-silhouette)
+CLOAK_L = "#3d2a1d"      # lit fold
 RIM = "#ff8c22"          # forge rim light
 RIM_SOFT = "#ffb347"
 STEEL = "#8f9aa3"
@@ -41,7 +41,7 @@ def defs() -> str:
   <linearGradient id="cloak" x1="0.2" y1="0" x2="0.8" y2="1">
     <stop offset="0" stop-color="{CLOAK_L}"/>
     <stop offset="0.55" stop-color="{CLOAK_D}"/>
-    <stop offset="1" stop-color="#070504"/>
+    <stop offset="1" stop-color="#0d0907"/>
   </linearGradient>
   <linearGradient id="steel" x1="0" y1="0" x2="0.4" y2="1">
     <stop offset="0" stop-color="{STEEL_L}"/><stop offset="0.5" stop-color="{STEEL}"/>

@@ -46,7 +46,10 @@ frontend/      Frontend (TypeScript, event-driven, PixiJS)
   src/dev/     MockRgs + devBooks.json (fixture z realnych książek, tylko DEV)
   src/render/Rig.ts   animacja kośćmi postaci (odpowiednik Spine, patrz ART_BIBLE §13)
   src/render/GlyphText.ts + UiPanel.ts  autorski krój pisma i pasek kontrolek w canvasie
-  public/assets/  atlas.png, scene_*.jpg, character.png, font.png, lobby.jpg, audio/*.ogg
+  public/assets/  atlas.png, logo.png, scene_*.jpg, character.png, font.png, lobby.jpg, audio/*.ogg
+  src/render/Background.ts  stos paralaksy (far/mid/near) — patrz ART_BIBLE §17
+  src/render/ReelFrame.ts   kuta rama bębnów z kartuszem i nitami
+  src/game/Autoplay.ts      limity autogry (czysta logika, testowana osobno)
 assets/        Pipeline assetów: generate_art.py, rasterize.mjs, generate_audio.py
   tests/       smoke.mjs — test przeglądarkowy (Playwright)
   player/      self-contained replay harness (index.html) — otwórz w przeglądarce
@@ -103,9 +106,11 @@ npm run assets         # (opcjonalnie) regeneracja: symbole, tła, postać, lobb
 npm run dev            # http://localhost:5173  — grywalna gra w przeglądarce
 npm run typecheck      # tsc --noEmit (czyste)
 npm run build          # typecheck + vite build -> dist/
-node tests/smoke.mjs   # test przeglądarkowy: 36 checków (mobile+desktop+locale pl)
+npm test               # 66 checków: limity autogry (18) + renderer (36) + autogra E2E (12)
 ```
-Gra działa w pełni: SPIN, wybór trybu (Base / Stoked / Buy Forge Fury / Buy Molten Core)
+Gra działa w pełni: SPIN, **autogra z limitami** (liczba rund, limit straty,
+limit pojedynczej wygranej, stop na funkcji, stop w dowolnym momencie),
+wybór trybu (Base / Stoked / Buy Forge Fury / Buy Molten Core)
 z **panelem potwierdzenia zakupu** (koszt, RTP, max win), **ekran pomocy/paytable**,
 loading screen z realnym preloadem, **grafika z atlasu tekstur** i **dźwięk OGG**
 (WebAudio) z wyciszeniem, cząstki, poziom zakładu, SKIP, TURBO,
