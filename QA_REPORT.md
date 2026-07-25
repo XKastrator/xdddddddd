@@ -75,8 +75,8 @@ super_big=2098×, maxwin_*=15000×.
 | Coin shower (pooled) | ✅ `juice.CoinShower` |
 | Anticipation nudge | ✅ |
 | Cząstki iskier | ✅ `Particles` |
-| **Custom typografia** | ⬜ nadal `system-ui` |
-| **UI w canvasie** (zamiast HTML pod spodem) | ⬜ |
+| **Custom typografia** | ✅ autorski krój „Emberwright Slab” (49 glifów, `GlyphText`) — w grze nie ma już `system-ui` |
+| **UI w canvasie** (zamiast HTML pod spodem) | ✅ `UiPanel`: SPIN/SKIP/TURBO/HELP, stepper zakładu, wybór trybu, readouty; w DOM został tylko pasek dostępności |
 | Shadery / filtry Pixi | ⬜ |
 | Spritesheet idle/hit per symbol | ⬜ (są tweeny, brak klatkowych animacji) |
 | Muzyka z rytmem/melodią | ⬜ (nadal drony + akordy) |

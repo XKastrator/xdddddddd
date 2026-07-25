@@ -45,7 +45,8 @@ frontend/      Frontend (TypeScript, event-driven, PixiJS)
   src/assets/  AssetLoader (preload atlasu + audio)
   src/dev/     MockRgs + devBooks.json (fixture z realnych książek, tylko DEV)
   src/render/Rig.ts   animacja kośćmi postaci (odpowiednik Spine, patrz ART_BIBLE §13)
-  public/assets/  atlas.png, scene_*.jpg, character.png, lobby.jpg, audio/*.ogg
+  src/render/GlyphText.ts + UiPanel.ts  autorski krój pisma i pasek kontrolek w canvasie
+  public/assets/  atlas.png, scene_*.jpg, character.png, font.png, lobby.jpg, audio/*.ogg
 assets/        Pipeline assetów: generate_art.py, rasterize.mjs, generate_audio.py
   tests/       smoke.mjs — test przeglądarkowy (Playwright)
   player/      self-contained replay harness (index.html) — otwórz w przeglądarce

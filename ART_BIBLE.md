@@ -168,6 +168,7 @@ python3 assets/generate_audio.py     # synteza numpy -> *.ogg (OGG Vorbis)
 | `scene_base.jpg` / `scene_bonus.jpg` / `scene_super.jpg` | tła 3 stanów rundy, 1024×1024 | 26 / 35 / 38 kB |
 | `lobby.jpg` | lobby tile 512×512 | 17 kB |
 | `character.png` + `character.json` | 4 części rigu Emberwrighta + pivoty | ~94 kB |
+| `font.png` + `font.json` | autorski krój „Emberwright Slab”, 49 glifów + metryki | ~104 kB |
 | `frontend/public/assets/audio/bed_{base,bonus,super}.ogg` | bezszwowe pady 8 s | ~63 kB każdy |
 | `.../sfx_{spin,forge,forge_big,heat,cinder,retrigger}.ogg` | SFX | 4–13 kB |
 | `.../sting_{bonus,super,pour,bigwin,maxwin}.ogg` | stingery | 16–29 kB |
@@ -219,3 +220,32 @@ odpalane przy każdym `forge`), `cheer` (obie ręce w górę — przy Big Win).
 tym, co wyeksportowałby rig Spine — wystarczy podmienić `Rig.ts` na
 `spine-pixi` i wczytać skeleton. Reszta renderera się nie zmienia, bo
 `PixiPresenter` woła tylko `rig.play('strike' | 'cheer' | 'idle')`.
+
+---
+
+## 14. Krój pisma — „Emberwright Slab”
+
+Renderowanie tekstu przez `system-ui` to najszybciej rozpoznawalny sygnał
+prototypu, a w tym środowisku nie ma kroju display'owego (dostępne są wyłącznie
+generyczne DejaVu / Liberation / FreeSans). Krój jest więc **autorski**.
+
+**Konstrukcja** (`assets/generate_font.py`): każdy glif to **szkielet** polilinii
+na siatce 6×10, renderowany w trzech przebiegach — szeroki ciemny obrys (cięta
+krawędź), korpus, cienki przesunięty highlight (światło na fazie). Glify są
+**białe**, więc Pixi tintuje je w miejscu użycia: mnożenie bieli z szarym obrysem
+samo daje ciemniejszą fazę i jeden atlas obsługuje bursztynowy HUD, złoty licznik
+wygranej oraz białe banery.
+
+**Cyfry mają stały advance** (figury tabelaryczne), więc licznik wygranej nie drga
+podczas odliczania.
+
+**Zakres:** 0–9, A–Z oraz `× + - / : . , % ! ? ' < >` — łącznie 49 glifów.
+
+**Metryki** (`font.json`): `baseline`, `capHeight`, `space`, `bearing` i `advance`
+per glif — wszystko w pikselach atlasu, więc `GlyphText` skaluje je dokładnie tak
+samo jak sam sprite glifu.
+
+**Rozszerzanie:** dopisz szkielet do słownika `G` w generatorze i uruchom
+`npm run assets`. Znaki spoza zakresu degradują się do spacji — dla lokalizacji
+poza łacińskim ASCII (np. polskie diakrytyki w banerach) trzeba dorysować glify
+albo zostawić dany tekst w warstwie DOM, tak jak działa ekran pomocy.
