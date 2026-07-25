@@ -50,35 +50,63 @@ export class AssetLoader {
   private scenes: Partial<Record<SceneName, Texture>> = {};
   private parts: Record<string, { texture: Texture; pivot: { x: number; y: number } }> = {};
   private glyphFont: GlyphFont | null = null;
+  /** Non-fatal load problems, surfaced by the boot diagnostics. */
+  readonly warnings: string[] = [];
   loaded = false;
 
+  /**
+   * Resolve the asset folder from THIS MODULE's own URL rather than from the
+   * page URL. A game served from a CDN sub-path (Stake Engine serves
+   * `.../{gameID}/{version}/index.html`) may be requested with or without a
+   * trailing slash; a bare relative string like 'assets/' then resolves one
+   * level off and every asset 404s. The bundle always sits in `<root>/assets/`,
+   * so its own URL is the reliable anchor.
+   */
+  static defaultBase(): string {
+    try {
+      return new URL('./', import.meta.url).href;
+    } catch {
+      return 'assets/';
+    }
+  }
+
   /** `onProgress` receives 0..1 across the whole asset set. */
-  async load(base = 'assets/', onProgress?: (p: number) => void): Promise<void> {
+  async load(base = AssetLoader.defaultBase(), onProgress?: (p: number) => void): Promise<void> {
     // meta + atlas + character + 3 scenes + audio
     const steps = 3 + 1 + SCENES.length + AUDIO_IDS.length;
     let done = 0;
     const tick = () => onProgress?.(++done / steps);
 
-    const meta: AtlasMeta = await fetch(`${base}atlas.json`).then((r) => r.json());
-    tick();
-
-    const sheet: Texture = await Assets.load(`${base}${meta.image}`);
-    tick();
-    for (const [symStr, frame] of Object.entries(FRAME_OF)) {
-      const f = meta.frames[frame as string];
-      if (!f) continue;
-      this.textures.set(Number(symStr) as Sym, new Texture({
-        source: sheet.source,
-        frame: new Rectangle(f.x, f.y, f.w, f.h),
-      }));
+    // Symbol atlas. NOT fatal: SymbolSprite falls back to procedural shapes, so
+    // a missing atlas costs looks, never the ability to play. A hard failure
+    // here used to abort boot and leave a black canvas.
+    try {
+      const meta: AtlasMeta = await fetch(`${base}atlas.json`).then((r) => {
+        if (!r.ok) throw new Error(`atlas.json ${r.status}`);
+        return r.json();
+      });
+      tick();
+      const sheet: Texture = await Assets.load(`${base}${meta.image}`);
+      for (const [symStr, frame] of Object.entries(FRAME_OF)) {
+        const f = meta.frames[frame as string];
+        if (!f) continue;
+        this.textures.set(Number(symStr) as Sym, new Texture({
+          source: sheet.source,
+          frame: new Rectangle(f.x, f.y, f.w, f.h),
+        }));
+      }
+    } catch (e) {
+      this.warnings.push(`symbol atlas unavailable (${String(e)})`);
+      tick();
     }
+    tick();
 
     // display typeface — the HUD falls back to Pixi Text if this is missing
     try {
       const fm: FontMeta = await fetch(`${base}font.json`).then((r) => r.json());
       const fsheet: Texture = await Assets.load(`${base}${fm.image}`);
       this.glyphFont = new GlyphFont(fm, fsheet);
-    } catch { /* no display face: caller uses its fallback */ }
+    } catch (e) { this.warnings.push(`display face unavailable (${String(e)})`); }
     tick();
 
     // character rig parts — optional, the game runs without the smith
@@ -92,7 +120,7 @@ export class AssetLoader {
           pivot: f.pivot,
         };
       }
-    } catch { /* no character art: rig simply is not shown */ }
+    } catch (e) { this.warnings.push(`character rig unavailable (${String(e)})`); }
     tick();
 
     // scenes — optional, Background falls back to a painted gradient

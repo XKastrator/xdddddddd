@@ -9,7 +9,7 @@
 import { Application } from 'pixi.js';
 import { BookPlayer } from './game/BookPlayer';
 import { PixiPresenter } from './render/PixiPresenter';
-import { MockRgs } from './dev/MockRgs';
+import { createSession } from './rgs/session';
 import { AssetLoader } from './assets/AssetLoader';
 import { AudioManager } from './audio/AudioManager';
 import { WebAudioBackend } from './audio/WebAudioBackend';
@@ -46,6 +46,10 @@ async function main(): Promise<void> {
   const assets = new AssetLoader();
   await assets.load('assets/', (p) => loading.set(0.1 + p * 0.8));
 
+  if (assets.warnings.length) {
+    console.warn('[molten-crown] assets degraded:\n' + assets.warnings.join('\n'));
+  }
+
   const backend = new WebAudioBackend((id) => assets.audioBuffer(id));
   const audio = new AudioManager(backend);
   // forward declarations so the in-canvas panel can call into the round logic
@@ -72,7 +76,7 @@ async function main(): Promise<void> {
   });
   const panel = presenter.panel;
 
-  const rgs = new MockRgs();
+  const rgs = createSession(params);
   const auth = await rgs.authenticate();
   loading.set(0.95);
 
@@ -207,4 +211,35 @@ async function main(): Promise<void> {
   await loading.done();
 }
 
-void main();
+/**
+ * Boot guard. A thrown error used to leave the player staring at a black canvas
+ * with the static shell still visible — indistinguishable from a hung game. Any
+ * failure now reports itself on screen (and to the console) so an upload problem
+ * is diagnosable without devtools.
+ */
+function showBootError(message: string): void {
+  document.querySelector('.loading')?.remove();
+  const box = document.createElement('div');
+  box.setAttribute('role', 'alert');
+  box.style.cssText = [
+    'position:fixed', 'inset:0', 'z-index:100', 'display:flex',
+    'align-items:center', 'justify-content:center', 'padding:24px',
+    'background:#0a0806', 'color:#f4ece0',
+    'font:14px/1.6 system-ui,-apple-system,sans-serif', 'text-align:center',
+  ].join(';');
+  box.innerHTML =
+    '<div style="max-width:520px">'
+    + '<div style="color:#ffb347;letter-spacing:4px;font-weight:800;margin-bottom:12px">'
+    + 'MOLTEN CROWN</div>'
+    + '<div style="color:#ff8a8a;margin-bottom:10px">The game could not start.</div>'
+    + `<pre style="white-space:pre-wrap;color:#9a8c78;font-size:12px;margin:0">${
+        message.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]!))
+      }</pre></div>`;
+  document.body.appendChild(box);
+}
+
+void main().catch((e: unknown) => {
+  const msg = e instanceof Error ? `${e.message}\n\n${e.stack ?? ''}` : String(e);
+  console.error('[molten-crown] boot failed', e);
+  showBootError(msg);
+});

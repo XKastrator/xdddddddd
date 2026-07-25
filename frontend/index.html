@@ -3,6 +3,31 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script>
+  /*
+   * CDN sub-path guard — must run before any other tag resolves a URL.
+   *
+   * Stake Engine serves the game from `.../{gameID}/{version}/index.html`, but
+   * the page can be requested without the trailing slash. The browser then
+   * resolves every relative URL (including the module bundle itself) against
+   * the PARENT folder, so the game silently 404s and the player is left with a
+   * blank stage and no error — the script never ran to report one.
+   *
+   * Anchoring an explicit <base> on the directory makes relative URLs correct
+   * either way.
+   */
+  (function () {
+    var p = location.pathname;
+    /* Only an explicit .html document is a file here. A generic
+       "has a dot" test misfires on version folders like `1.0.0`, which is
+       exactly the path Stake Engine serves from. */
+    if (!/\/$/.test(p) && !/\.html?$/i.test(p)) {
+      var b = document.createElement('base');
+      b.href = p + '/';
+      document.head.appendChild(b);
+    }
+  })();
+</script>
 <title>Molten Crown — PixiJS Renderer</title>
 <style>
   :root{

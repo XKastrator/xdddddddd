@@ -157,3 +157,50 @@ i pliki Spine (brak licencji w tym środowisku), skala symulacji 1M/mode oraz te
 E2E z realnym RGS to jasno oznaczone kolejne kroki
 (`IMPLEMENTATION_PLAN.md`, `QA_REPORT.md`). Nic nie jest deklarowane jako
 „zrobione”, jeśli nie zostało faktycznie uruchomione.
+
+---
+
+## Wgrywanie na Stake Engine (deployment)
+
+```bash
+cd frontend
+npm run assets   # (raz) wygeneruj atlas, krój, tła, postać, audio
+npm run build    # -> dist/
+```
+Wgraj **całą zawartość `dist/`** zachowując strukturę katalogów:
+```
+index.html
+assets/index-*.js       assets/pixi-*.js
+assets/atlas.png|json   assets/font.png|json   assets/character.png|json
+assets/scene_*.jpg      assets/lobby.jpg       assets/audio/*.ogg
+```
+
+### Trzy rzeczy, które psuły wdrożenie (naprawione)
+
+1. **Ścieżka bez ukośnika na końcu.** Stake Engine serwuje grę z
+   `.../{gameID}/{version}/`, ale URL bywa żądany bez końcowego `/`. Przeglądarka
+   rozwiązuje wtedy `./assets/index.js` względem katalogu **nadrzędnego** — sam
+   bundle daje 404, więc JS nigdy się nie uruchamia i zostaje czarny ekran ze
+   statycznym HTML‑em (bez żadnego błędu, bo nie ma czego zgłosić).
+   `index.html` ustawia teraz `<base>` na katalog, jeśli ścieżka nie kończy się
+   `/` ani `.html`. **Uwaga:** test „czy to plik” musi sprawdzać wyłącznie
+   `.html` — ogólne „czy jest kropka” błędnie klasyfikuje folder wersji `1.0.0`
+   jako plik.
+2. **Brakujące assety przerywały start.** Pierwszy `fetch('assets/atlas.json')`
+   nie był objęty `try/catch`. Teraz atlas jest opcjonalny — `SymbolSprite` ma
+   fallback proceduralny, więc gra startuje i jest grywalna nawet przy 404 na
+   całej grafice; problemy trafiają do `assets.warnings` i konsoli.
+3. **Build używał zawsze `MockRgs`.** `rgs/session.ts` wybiera teraz **prawdziwy
+   `RgsClient`, gdy w URL jest `rgs_url`**, a mocka tylko lokalnie. Wcześniej
+   wgrana gra wyglądałaby poprawnie, ale nie stawiałaby realnych zakładów.
+
+Dodatkowo każdy błąd startu pokazuje się **na ekranie** (`role="alert"`) zamiast
+zostawiać czarny canvas.
+
+### Zweryfikowane scenariusze serwowania
+| Scenariusz | Wynik |
+|---|---|
+| `/team/game/1.0.0` (bez ukośnika) | ✅ startuje |
+| `/team/game/1.0.0/` | ✅ startuje |
+| `/team/game/1.0.0/index.html` | ✅ startuje |
+| wszystkie assety graficzne 404 | ✅ startuje na fallbacku |
