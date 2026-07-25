@@ -117,6 +117,12 @@ def defs() -> str:
     <stop offset="0" stop-color="#000000" stop-opacity="0.02"/>
     <stop offset="1" stop-color="#000000" stop-opacity="0.42"/>
   </linearGradient>
+  <!-- one dark matrix for every ore variant: the rock is the same worthless
+       stone everywhere, only the mineral in it differs -->
+  <linearGradient id="oreMatrix" x1="0.2" y1="0" x2="0.8" y2="1">
+    <stop offset="0" stop-color="#4a443c"/><stop offset="0.4" stop-color="#332e28"/>
+    <stop offset="1" stop-color="#171310"/>
+  </linearGradient>
   <!-- ore sits in shadow far harder than polished metal does -->
   <linearGradient id="oreShade" x1="0.25" y1="0" x2="0.75" y2="1">
     <stop offset="0" stop-color="#000000" stop-opacity="0"/>
@@ -157,29 +163,74 @@ ORE_FACETS = {
 }
 
 
-def ore(shape: str, base: str, light: str, dark: str, seed: int) -> str:
+# One crystal cluster, shared by every variant and clipped to the variant's own
+# silhouette. Sharing it is deliberate: the SHAPE carries variant identity (the
+# colour-blind cue), the HUE carries the separation, and a shared cluster keeps
+# all five reading as the same material.
+CLUSTER = [
+    # (cx, cy, half-width, half-height, tilt°) — the tilts matter: three upright
+    # prisms of graded height read as a bar chart, not as crystal.
+    (116, 128, 30, 64, -6),
+    (168, 154, 22, 44, 13),
+    (84, 170, 18, 38, -15),
+    (142, 190, 14, 26, 5),
+]
+
+
+def crystal(cx: int, cy: int, w: int, h: int, tilt: float,
+            light: str, mid: str, dark: str) -> str:
+    """A single faceted prism, lit from the upper left."""
+    body = (f"M{cx},{cy - h} L{cx + w},{cy - h * 0.5:.0f} "
+            f"L{cx + w},{cy + h * 0.72:.0f} L{cx},{cy + h} "
+            f"L{cx - w},{cy + h * 0.72:.0f} L{cx - w},{cy - h * 0.5:.0f} Z")
+    lit = (f"M{cx},{cy - h} L{cx},{cy + h} L{cx - w},{cy + h * 0.72:.0f} "
+           f"L{cx - w},{cy - h * 0.5:.0f} Z")
+    shade = (f"M{cx},{cy - h} L{cx + w},{cy - h * 0.5:.0f} "
+             f"L{cx + w},{cy + h * 0.72:.0f} L{cx},{cy + h} Z")
+    return (f'<g transform="rotate({tilt} {cx} {cy})">'
+            f'<path d="{body}" fill="{mid}"/>'
+            f'<path d="{lit}" fill="{light}" opacity="0.8"/>'
+            f'<path d="{shade}" fill="{dark}" opacity="0.6"/>'
+            # a hard specular streak is what separates "crystal" from "paint"
+            f'<path d="M{cx - w * 0.55:.0f},{cy - h * 0.42:.0f} '
+            f'L{cx - w * 0.2:.0f},{cy - h * 0.5:.0f} '
+            f'L{cx - w * 0.2:.0f},{cy + h * 0.3:.0f} '
+            f'L{cx - w * 0.55:.0f},{cy + h * 0.42:.0f} Z" '
+            f'fill="#ffffff" opacity="0.55"/>'
+            f'<path d="{body}" fill="none" stroke="{light}" stroke-width="2.5" '
+            f'opacity="0.7" stroke-linejoin="round"/></g>')
+
+
+def ore(shape: str, light: str, mid: str, deep: str, seed: int) -> str:
+    """Raw ore: a dark rock matrix with a saturated crystal cluster growing out.
+
+    The previous version was a faceted brown rock, and since ore fills most of
+    the board most of the time, the whole grid read as one muddy earth tone with
+    nothing separating the five variants at a glance. Ore is now MINERAL: one
+    shared dark matrix so it still reads as worthless fuel, and a strongly
+    hue-separated crystal cluster so the board has colour and the variants are
+    distinguishable peripherally.
+    """
     body = ORE_SHAPES[shape]
-    # Facets carry the whole read of a rough rock; at low opacity the turbulence
-    # texture flattens them out and every ore variant collapses into one brown
-    # blob, which is exactly what the drop-shadow-less fuel symbols must not do.
-    facets = "".join(
-        f'<path d="{f}" fill="{light}" opacity="{0.44 - i * 0.13:.2f}"/>'
-        for i, f in enumerate(ORE_FACETS[shape]))
-    # chipped edges: short strokes along the silhouette
+    cluster = "".join(crystal(cx, cy, w, h, tilt, light, mid, deep)
+                      for cx, cy, w, h, tilt in CLUSTER)
     return f"""
 <g>
   <g filter="url(#softShadow)" opacity="0.55">
     <path d="{body}" fill="#000000" transform="translate(4,8)"/>
   </g>
-  <path d="{body}" fill="{base}"/>
+  <path d="{body}" fill="url(#oreMatrix)"/>
   <g clip-path="url(#clip{seed})">
-    <path d="{body}" fill="{base}" filter="url(#rock)" opacity="0.92"/>
+    <path d="{body}" fill="#3a332b" filter="url(#rock)" opacity="0.55"/>
+    <!-- the matrix takes the shade pass, the crystal does NOT: laying the ramp
+         over the mineral desaturated it straight back to mud -->
+    <path d="{body}" fill="url(#oreShade)"/>
+    <g filter="url(#glowTight)" opacity="0.5">{cluster}</g>
+    {cluster}
   </g>
-  {facets}
-  <path d="{body}" fill="url(#oreShade)"/>
-  <path d="{body}" fill="none" stroke="{dark}" stroke-width="8" stroke-linejoin="round"/>
-  <path d="{body}" fill="none" stroke="{light}" stroke-width="2.5"
-        stroke-linejoin="round" opacity="0.5"/>
+  <path d="{body}" fill="none" stroke="#0a0806" stroke-width="8" stroke-linejoin="round"/>
+  <path d="{body}" fill="none" stroke="{mid}" stroke-width="2.5"
+        stroke-linejoin="round" opacity="0.55"/>
 </g>"""
 
 
@@ -289,11 +340,14 @@ def wrap_lines(x0: int, x1: int, y0: int, y1: int, step: int,
 
 
 SYMBOLS: list[tuple[str, str]] = [
-    ("O1", ore("shard", "#7a4f1e", "#c98d3f", "#241304", 1)),
-    ("O2", ore("cube", "#4d5a3f", "#8fa077", "#161c10", 2)),
-    ("O3", ore("rhomb", "#803a24", "#c8724c", "#2a0f06", 3)),
-    ("O4", ore("hex", "#3b4c5a", "#7b91a8", "#111820", 4)),
-    ("O5", ore("nodule", "#736023", "#c0a04a", "#241b06", 5)),
+    # Five minerals, chosen for maximum hue separation from each other AND from
+    # the specials: FLUX owns cyan-teal and CINDER owns amber, so ore takes
+    # green, blue, red, lime and violet.
+    ("O1", ore("shard", "#a8ffc6", "#2fbf6a", "#0b4227", 1)),      # malachite
+    ("O2", ore("cube", "#a6d9ff", "#2f7fdf", "#0b2a5c", 2)),       # azurite
+    ("O3", ore("rhomb", "#ffb3a0", "#e0452a", "#571004", 3)),      # cinnabar
+    ("O4", ore("hex", "#f6ffa8", "#c9d423", "#4a5206", 4)),        # sulphur
+    ("O5", ore("nodule", "#e2b6ff", "#9a4fe0", "#37115e", 5)),     # amethyst
 
     # I — a cast bronze bar, straight off the mould
     ("BRONZE", relic(
