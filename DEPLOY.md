@@ -92,13 +92,13 @@ zgodność `payoutMultiplier` między tabelą a książką, cap 15 000×, obecno
 
 | Zestaw | Plik | Checków |
 |---|---|---|
-| Parametry uruchomienia (`rgs_url`) | `frontend/tests/params.mjs` | 14 |
+| Parametry uruchomienia + drabina zakładów | `frontend/tests/params.mjs` | 20 |
 | **Prawdziwe kliknięcia w kontrolki w canvasie** | `frontend/tests/click.mjs` | 12 |
 | Limity autogry (deterministyczne) | `frontend/tests/autoplay_limits.mjs` | 18 |
 | Renderer (mobile + desktop + pl) | `frontend/tests/smoke.mjs` | 36 |
 | Autogra E2E | `frontend/tests/autoplay.mjs` | 12 |
 | Scenariusze serwowania z CDN | `frontend/tests/deploy.mjs` | 12 |
-| **Build wydaniowy przeciw atrapie RGS** | `frontend/tests/rgs_e2e.mjs` | 34 |
+| **Build wydaniowy przeciw atrapie RGS** | `frontend/tests/rgs_e2e.mjs` | 42 |
 | Pliki publikacyjne | `math/tools/verify_publish.py` | 4 tryby |
 
 ```bash
@@ -106,7 +106,7 @@ cd frontend && npm run test:all      # buduje oba warianty i uruchamia wszystko
 python3 math/tools/verify_publish.py
 ```
 
-**138 checków, wszystkie uruchomione.**
+**151 checków, wszystkie uruchomione.**
 
 `rgs_e2e.mjs` stawia serwer implementujący kontrakt portfela Stake Engine
 (`/wallet/authenticate`, `/wallet/play`, `/wallet/end-round`), serwuje
@@ -116,7 +116,25 @@ to, co wyśle prawdziwy RGS.
 
 ---
 
-## 4. Siedem rzeczy, które psuły wdrożenie (naprawione i objęte testem)
+## 4. Dziewięć rzeczy, które psuły wdrożenie (naprawione i objęte testem)
+
+-5. **Książka rundy leży nie tam, gdzie zakładałem.** Dokumentacja opisuje
+   endpointy portfela precyzyjnie, ale ładunek rundy podaje jako
+   `"round": { ... }` — z pominięciem środka. `round.book` było zgadywaniem i
+   dawało `cannot read properties of undefined (reading 'events')` **już po
+   pobraniu zakładu**. Klient szuka teraz książki **po kształcie**: to obiekt z
+   tablicą `events`, a nic innego w odpowiedzi portfela tak nie wygląda.
+   Działa dla `round.book`, `round.state`, samego `round` i głębszych
+   zagnieżdżeń — cztery scenariusze w `rgs_e2e.mjs`. Gdy książki nie ma wcale,
+   komunikat podaje **faktyczny kształt odpowiedzi**.
+
+-4. **Kwoty przycinane do 32 bitów.** Granice zakładu czytałem przez
+   `cfg.minBet | 0`. To obcięcie do 32-bitowego inta, a pieniądze w RGS to
+   liczby całkowite z **sześcioma** miejscami po przecinku — `maxBet` = 10 000 $
+   to `10_000_000_000` i się zawija. Zakład lądował poza `minBet..maxBet` albo
+   poza siatką `stepBet`, a `/wallet/play` odpowiadał `ERR_VAL`. Atrapa używała
+   `maxBet` = 100 $, co mieści się w 32 bitach — czyli potwierdzała przypadek,
+   który i tak działał.
 
 -3. **Nazwa trybu: `base` czy `BASE`?** Math SDK nazywa tryby małymi literami
    (`name="base"`), a przykład żądania `/wallet/play` w dokumentacji RGS wysyła
