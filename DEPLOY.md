@@ -49,6 +49,13 @@ się jawnym błędem na ekranie zamiast cichej gry na fikcyjnych zakładach.
 Gra czyta z URL‑a: `sessionID`, `rgs_url`, `lang`, `device`. Żaden z nich nie
 jest zaszyty w kodzie. Bez `rgs_url` build wydaniowy nie wystartuje — celowo.
 
+### Diagnostyka
+
+Dopisz `&debug=1` do adresu uruchomienia. W lewym dolnym rogu pojawi się panel
+z adresem RGS, `sessionID`, trybem, kwotą zakładu, konfiguracją z
+`/wallet/authenticate` i **ostatnim odrzuceniem** (kod, status HTTP, wysłany
+tryb i kwota). To pierwsza rzecz, o którą warto poprosić przy zgłoszeniu.
+
 ---
 
 ## 2. Math
@@ -91,7 +98,7 @@ zgodność `payoutMultiplier` między tabelą a książką, cap 15 000×, obecno
 | Renderer (mobile + desktop + pl) | `frontend/tests/smoke.mjs` | 36 |
 | Autogra E2E | `frontend/tests/autoplay.mjs` | 12 |
 | Scenariusze serwowania z CDN | `frontend/tests/deploy.mjs` | 12 |
-| **Build wydaniowy przeciw atrapie RGS** | `frontend/tests/rgs_e2e.mjs` | 24 |
+| **Build wydaniowy przeciw atrapie RGS** | `frontend/tests/rgs_e2e.mjs` | 34 |
 | Pliki publikacyjne | `math/tools/verify_publish.py` | 4 tryby |
 
 ```bash
@@ -99,7 +106,7 @@ cd frontend && npm run test:all      # buduje oba warianty i uruchamia wszystko
 python3 math/tools/verify_publish.py
 ```
 
-**128 checków, wszystkie uruchomione.**
+**138 checków, wszystkie uruchomione.**
 
 `rgs_e2e.mjs` stawia serwer implementujący kontrakt portfela Stake Engine
 (`/wallet/authenticate`, `/wallet/play`, `/wallet/end-round`), serwuje
@@ -109,7 +116,16 @@ to, co wyśle prawdziwy RGS.
 
 ---
 
-## 4. Sześć rzeczy, które psuły wdrożenie (naprawione i objęte testem)
+## 4. Siedem rzeczy, które psuły wdrożenie (naprawione i objęte testem)
+
+-3. **Nazwa trybu: `base` czy `BASE`?** Math SDK nazywa tryby małymi literami
+   (`name="base"`), a przykład żądania `/wallet/play` w dokumentacji RGS wysyła
+   `"mode": "BASE"`. Zamiast zgadywać, klient wysyła nazwę tak, jak jest w
+   konfiguracji, a **jeśli RGS odrzuci ją błędem walidacji — ponawia raz
+   wielkimi literami** i zapamiętuje działający wariant na całą sesję.
+   To nie może obciążyć dwa razy: odrzucenie walidacyjne oznacza, że zakład nie
+   został przyjęty, więc nie było obciążenia. Każdy inny błąd (saldo, sesja,
+   sieć) jest przepuszczany dalej bez ponawiania — tamte mogły ruszyć pieniądze.
 
 -2. **Nieukończona runda blokowała grę na stałe.** Specyfikacja RGS mówi wprost:
    *„Frontends should continue the round if it remains active"*. `app.ts` tego
@@ -157,7 +173,12 @@ to, co wyśle prawdziwy RGS.
    w ramce operatora praktycznie nie widać — nieudana runda wyglądała
    identycznie jak martwy przycisk. Komunikaty rysują się teraz **na canvasie**
    (`render/Toast.ts`), a wersja DOM zostaje dla czytników ekranu.
-5. **Kliknięcia nie były testowane.** Wszystkie testy klikały przez
+5. **„Round failed" nic nie mówiło.** Ogólne zdanie było bezużyteczne dla obu
+   stron: gracz ponawia w nieskończoność, a wsparcie nie ma się czego chwycić.
+   Komunikat zawiera teraz **kod RGS i status HTTP** (np. `ERR_VAL (400)`), a
+   `?debug=1` pokazuje panel z adresem RGS, trybem, kwotą, konfiguracją zakładów
+   i ostatnim odrzuceniem — do sfotografowania, bez devtools.
+6. **Kliknięcia nie były testowane.** Wszystkie testy klikały przez
    `window.__ui`, czyli wołały te same callbacki co przyciski — co nie
    sprawdzało *w ogóle*, czy da się w nie kliknąć. Kontrolki są rysowane w
    canvasie, więc zależą wyłącznie od hit-testingu PixiJS. `tests/click.mjs`

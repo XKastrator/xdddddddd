@@ -60,6 +60,8 @@ const state = {
   omitBetLevels: false,
   pendingRound: null,          // an unfinished round reported by authenticate
   rejectWhileActive: true,     // a real RGS refuses a bet while a round is open
+  requireUpperMode: false,     // model an RGS that publishes modes upper-cased
+  modesSeen: [],               // every mode string the client actually sent
 };
 const MODE_COST = { base: 1, ante: 1.25, bonus: 100, super: 500 };
 
@@ -129,7 +131,13 @@ const srv = http.createServer((req, res) => {
         if (state.rejectWhileActive && (state.active || state.pendingRound)) {
           return json(res, 409, { error: 'ERR_VAL' });
         }
-        const cost = Math.round(body.amount * (MODE_COST[body.mode] ?? 1));
+        state.modesSeen.push(String(body.mode));
+        if (state.requireUpperMode && body.mode !== String(body.mode).toUpperCase()) {
+          // validation rejection: nothing is debited, exactly as a real RGS
+          return json(res, 400, { error: 'ERR_VAL' });
+        }
+        const key = String(body.mode).toLowerCase();
+        const cost = Math.round(body.amount * (MODE_COST[key] ?? 1));
         if (cost > state.balance) return json(res, 402, { error: 'ERR_IPB' });
         const book = books[Math.floor(Math.random() * books.length)];
         state.balance -= cost;
@@ -363,6 +371,73 @@ check('the client shows the server balance, not its own arithmetic',
   check('no page errors without betLevels', errs.length === 0, errs.slice(0, 2).join(' | '));
   await p6.close();
   state.omitBetLevels = false;
+}
+
+// --- 3e. an RGS that publishes bet modes upper-cased --------------------------
+// The math SDK names modes lowercase; the RGS docs' play example sends "BASE".
+// A validation rejection means nothing was debited, so one retry in upper case
+// is safe — and must not be attempted for any other kind of failure.
+{
+  const p7 = await browser.newPage({ viewport: { width: 1366, height: 820 } });
+  const errs = [];
+  p7.on('pageerror', (e) => errs.push(String(e)));
+  state.calls.length = 0;
+  state.modesSeen.length = 0;
+  state.balance = 1000 * U;
+  state.active = null;
+  state.pendingRound = null;
+  state.requireUpperMode = true;
+  await p7.goto(`${origin}${BASE}/?sessionID=upper-mode&lang=en`
+    + `&rgs_url=${encodeURIComponent(`${origin}/rgs`)}`, { waitUntil: 'networkidle' });
+  await p7.waitForFunction(
+    () => !!window.__ui || !!document.querySelector('[role="alert"]'),
+    null, { timeout: 60000 }).catch(() => {});
+
+  const before = await p7.evaluate(() => window.__ui?.balance?.() ?? '');
+  await p7.evaluate(() => window.__ui?.spin?.());
+  await p7.waitForFunction((b) => window.__ui.balance() !== b, before,
+    { timeout: 30000 }).catch(() => {});
+  const after = await p7.evaluate(() => window.__ui?.balance?.() ?? '');
+  check('a bet succeeds against an upper-case-only RGS', after !== before,
+    `${before} -> ${after}; modes sent = ${state.modesSeen.join(',')}`);
+  check('the rejected attempt was retried, not repeated blindly',
+    state.modesSeen.length === 2 && state.modesSeen[1] === 'BASE',
+    state.modesSeen.join(','));
+
+  // and the working casing is remembered rather than re-probed every round.
+  // The first round has to be fully CLOSED first: while it is open the fixture
+  // rejects the bet before it ever records a mode, so the assertion would be
+  // measuring the active-round guard instead of the casing memory.
+  await p7.waitForFunction(() => window.__ui.idle(), null, { timeout: 60000 }).catch(() => {});
+  state.modesSeen.length = 0;
+  const before2 = await p7.evaluate(() => window.__ui?.balance?.() ?? '');
+  await p7.evaluate(() => window.__ui?.spin?.());
+  await p7.waitForFunction((b) => window.__ui.balance() !== b, before2,
+    { timeout: 30000 }).catch(() => {});
+  check('the accepted casing is reused for later bets',
+    state.modesSeen.length === 1 && state.modesSeen[0] === 'BASE',
+    state.modesSeen.join(','));
+  check('no page errors against an upper-case RGS', errs.length === 0,
+    errs.slice(0, 2).join(' | '));
+  await p7.close();
+  state.requireUpperMode = false;
+}
+
+// --- 3f. a rejection tells the player WHICH rejection it was -----------------
+{
+  const p8 = await browser.newPage({ viewport: { width: 1366, height: 820 } });
+  state.calls.length = 0;
+  state.balance = 1000 * U;
+  state.active = null;
+  state.pendingRound = null;
+  await p8.goto(`${origin}${BASE}/?sessionID=diag&lang=en&debug=1`
+    + `&rgs_url=${encodeURIComponent(`${origin}/rgs`)}`, { waitUntil: 'networkidle' });
+  await p8.waitForFunction(() => !!window.__ui, null, { timeout: 60000 }).catch(() => {});
+  check('the debug panel is available', await p8.evaluate(() => !!document.getElementById('diag')));
+  check('diagnostics name the RGS the game is talking to',
+    await p8.evaluate(() => (window.__ui.diagnostics().rgs || '').startsWith('http')),
+    await p8.evaluate(() => window.__ui.diagnostics().rgs));
+  await p8.close();
 }
 
 // --- 4. insufficient balance is surfaced, not swallowed ----------------------

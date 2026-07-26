@@ -110,6 +110,8 @@ async function main(): Promise<void> {
   let audioReady = false;
   let player: BookPlayer | null = null;
   let autoSession: AutoplaySession | null = null;
+  /** Last RGS rejection, surfaced for support without opening devtools. */
+  let lastError: Record<string, unknown> | null = null;
 
   const $ = (id: string) => document.getElementById(id) as HTMLElement;
   let betIdx = Math.max(0, BET_LEVELS.indexOf(bet));
@@ -221,7 +223,23 @@ async function main(): Promise<void> {
       // text instead of telling the player what actually happened.
       const code = e instanceof RgsClientError ? e.code
         : e instanceof Error ? e.message : '';
-      notify(code === 'ERR_IPB' ? t('err.balance') : t('err.round'));
+      if (code === 'ERR_IPB') {
+        notify(t('err.balance'));
+      } else {
+        // Show the RGS's OWN verdict. "Round failed, please try again" is
+        // useless to everyone: the player retries forever and support has
+        // nothing to go on. The code and status say which side is refusing and
+        // why, and they are short enough to read off a screen.
+        const status = e instanceof RgsClientError ? e.status : 0;
+        lastError = {
+          code: code || 'unknown', status,
+          mode, amount: bet, rgs: params.rgsUrl,
+          detail: e instanceof Error ? e.message : String(e),
+        };
+        console.error('[molten-crown] play failed', lastError);
+        notify(status ? `${t('err.round')} · ${code} (${status})`
+          : `${t('err.round')} · ${code || 'network'}`);
+      }
       return null;
     } finally {
       busy = false;
@@ -331,12 +349,43 @@ async function main(): Promise<void> {
     // read-only surface for the pointer-input test: it must be able to find the
     // in-canvas controls and observe their effect without a DOM node to query
     hitPoints: () => presenter.hitPoints(),
+    // what the game is actually talking to, and what went wrong last — the two
+    // questions any deployment problem starts with
+    diagnostics: () => ({
+      rgs: params.rgsUrl, session: params.sessionID, live: rgs.live,
+      mode, bet, betLevels: BET_LEVELS, config: auth.config, lastError,
+    }),
     betText: () => formatMoney(costUnits(), currency),
     turboOn: () => turbo,
     autoplay: () => autoplayFn(),
     stopAuto: () => stopAutoFn(),
     autoRemaining: () => autoSession?.remaining ?? null,
   };
+
+  /**
+   * `?debug=1` panel. A deployment problem always starts with the same two
+   * questions — what is the game talking to, and what exactly did it refuse —
+   * and neither is answerable from a screenshot of "round failed". This puts
+   * both on screen, where they can be photographed, without devtools.
+   */
+  if (new URLSearchParams(location.search).get('debug') === '1') {
+    const box = document.createElement('pre');
+    box.id = 'diag';
+    box.style.cssText = [
+      'position:fixed', 'left:8px', 'bottom:8px', 'z-index:60', 'margin:0',
+      'max-width:min(560px,92vw)', 'max-height:46vh', 'overflow:auto',
+      'padding:10px 12px', 'border-radius:10px', 'white-space:pre-wrap',
+      'background:rgba(6,4,2,.92)', 'color:#f4ece0', 'border:1px solid #2a2018',
+      'font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace',
+    ].join(';');
+    document.body.appendChild(box);
+    const paint = () => {
+      const d = (globalThis as Record<string, any>).__ui?.diagnostics?.();
+      box.textContent = JSON.stringify(d, null, 1);
+    };
+    paint();
+    window.setInterval(paint, 1000);
+  }
 
   await loading.done();
 }
