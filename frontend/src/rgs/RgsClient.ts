@@ -4,6 +4,7 @@
  * The client NEVER computes payouts; it only relays server responses.
  */
 import type { Book, BetModeName } from '../types/events';
+import { findBook, describeShape } from './findBook';
 
 export interface Balance { amount: number; currency: string; }
 export interface Jurisdiction {
@@ -33,6 +34,20 @@ export class RgsClientError extends Error {
   constructor(public code: RgsError, public status: number, public url = '') {
     super(`RGS ${code} (${status})${url ? ` at ${url}` : ''}`);
   }
+}
+
+/**
+ * Pull the book out of a play response, or fail with the response's actual
+ * shape. Throwing here — after the debit — is unavoidable, but the message has
+ * to say what came back, or the next person is guessing at nesting too.
+ */
+function bookOf(raw: unknown): Book {
+  const book = findBook(raw);
+  if (!book) {
+    throw new Error('the RGS play response contained no book (no `events` array). '
+      + `Response shape: ${describeShape(raw)}`);
+  }
+  return book;
 }
 
 export class RgsClient {
@@ -73,8 +88,12 @@ export class RgsClient {
     return res.json() as Promise<T>;
   }
 
-  authenticate(): Promise<AuthResponse> {
-    return this.post<AuthResponse>('/wallet/authenticate', {});
+  async authenticate(): Promise<AuthResponse> {
+    const raw = await this.post<Record<string, unknown>>('/wallet/authenticate', {});
+    const res = raw as unknown as AuthResponse;
+    // An active round has to carry its book through, wherever the server put it
+    if (res.round?.active) res.round.book = findBook(raw.round ?? raw) ?? undefined;
+    return res;
   }
   balance(): Promise<{ balance: Balance }> {
     return this.post('/wallet/balance', {});
@@ -100,7 +119,10 @@ export class RgsClient {
    * moved money and must never be retried blind.
    */
   async play(amount: number, mode: BetModeName): Promise<PlayResponse> {
-    const send = (m: string) => this.post<PlayResponse>('/wallet/play', { amount, mode: m });
+    const send = async (m: string): Promise<PlayResponse> => {
+      const raw = await this.post<Record<string, unknown>>('/wallet/play', { amount, mode: m });
+      return { ...(raw as unknown as PlayResponse), round: { book: bookOf(raw), mode } };
+    };
 
     if (this.modeCase === 'upper') return send(mode.toUpperCase());
     try {

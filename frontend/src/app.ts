@@ -208,13 +208,14 @@ async function main(): Promise<void> {
       setBal(res.balance.amount);
       presenter.skip = false;
       presenter.reduced = turbo || reducedWanted();
+      if (!res.round?.book) throw new Error('the RGS returned a round with no book');
       player = new BookPlayer(res.round.book, presenter);
       const winMult = await player.play();
       const end = await rgs.endRound(bet);
       setBal(end.balance.amount);
       return {
         winUnits: Math.round(bet * winMult),
-        bonus: res.round.book.events.some((e) => e.type === 'bonusStart'),
+        bonus: (res.round.book?.events ?? []).some((e) => e.type === 'bonusStart'),
       };
     } catch (e) {
       // RgsClientError carries the code in `.code`; its `.message` is the

@@ -62,6 +62,9 @@ const state = {
   rejectWhileActive: true,     // a real RGS refuses a bet while a round is open
   requireUpperMode: false,     // model an RGS that publishes modes upper-cased
   modesSeen: [],               // every mode string the client actually sent
+  // The docs elide the round payload as `"round": { ... }`, so the nesting is
+  // undocumented. These are the shapes a server plausibly sends.
+  roundShape: 'book',          // 'book' | 'state' | 'flat' | 'nested'
 };
 const MODE_COST = { base: 1, ante: 1.25, bonus: 100, super: 500 };
 
@@ -142,9 +145,15 @@ const srv = http.createServer((req, res) => {
         const book = books[Math.floor(Math.random() * books.length)];
         state.balance -= cost;
         state.active = { book, bet: body.amount };
+        const shaped = {
+          book: { book, mode: body.mode },
+          state: { state: book, mode: body.mode },
+          flat: { ...book, mode: body.mode },
+          nested: { bet: { round: { book } }, mode: body.mode },
+        }[state.roundShape];
         return json(res, 200, {
           balance: { amount: state.balance, currency: 'USD' },
-          round: { book, mode: body.mode },
+          round: shaped,
         });
       }
 
@@ -439,6 +448,38 @@ check('the client shows the server balance, not its own arithmetic',
     await p8.evaluate(() => window.__ui.diagnostics().rgs));
   await p8.close();
 }
+
+// --- 3g. the book is found wherever the round payload puts it ----------------
+// `"round": { ... }` is elided in the docs, and assuming `round.book` produced
+// "cannot read properties of undefined (reading 'events')" against the live RGS
+// — after the bet had already been debited.
+for (const shape of ['book', 'state', 'flat', 'nested']) {
+  const p8 = await browser.newPage({ viewport: { width: 1366, height: 820 } });
+  const errs = [];
+  p8.on('pageerror', (e) => errs.push(String(e)));
+  state.calls.length = 0;
+  state.balance = 1000 * U;
+  state.active = null;
+  state.pendingRound = null;
+  state.roundShape = shape;
+  await p8.goto(`${origin}${BASE}/?sessionID=shape-${shape}&lang=en`
+    + `&rgs_url=${encodeURIComponent(`${origin}/rgs`)}`, { waitUntil: 'networkidle' });
+  await p8.waitForFunction(
+    () => !!window.__ui || !!document.querySelector('[role="alert"]'),
+    null, { timeout: 60000 }).catch(() => {});
+
+  const before = await p8.evaluate(() => window.__ui?.balance?.() ?? '');
+  await p8.evaluate(() => window.__ui?.spin?.());
+  await p8.waitForFunction((b) => window.__ui.balance() !== b, before,
+    { timeout: 30000 }).catch(() => {});
+  const after = await p8.evaluate(() => window.__ui?.balance?.() ?? '');
+  check(`a round plays with the book at round.${shape}`, after !== before,
+    `${before} -> ${after}`);
+  check(`no undefined dereference with round.${shape}`,
+    !errs.some((e) => /undefined/i.test(e)), errs.slice(0, 1).join(''));
+  await p8.close();
+}
+state.roundShape = 'book';
 
 // --- 4. insufficient balance is surfaced, not swallowed ----------------------
 // clear any round the earlier scenarios left open, or /wallet/play answers with
