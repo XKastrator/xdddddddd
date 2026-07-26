@@ -26,6 +26,7 @@ Roztopioną Koronę (**15,000×**).
 | [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) | Milestone'y, priorytety, ryzyka |
 | [`QA_REPORT.md`](QA_REPORT.md) | Testy, wyniki, znane problemy |
 | [`APPROVAL_CHECKLIST.md`](APPROVAL_CHECKLIST.md) | Zgodność ze Stake Engine + zasadami briefu |
+| [`DEPLOY.md`](DEPLOY.md) | **Wgranie na Stake Engine** — build wydaniowy, paczki, weryfikacja |
 | [`ASSET_PROMPTS.md`](ASSET_PROMPTS.md) | **Gotowe prompty do wygenerowania każdego assetu** + nazwy plików i rozmiary |
 
 ## Struktura repo

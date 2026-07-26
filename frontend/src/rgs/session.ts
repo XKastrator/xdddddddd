@@ -7,11 +7,18 @@
  * RGS; without it we are in a local demo and fall back to the mock library.
  * Shipping a build that always used the mock would look fine on screen while
  * placing no real bets at all.
+ *
+ * The mock and its book fixture are excluded from a RELEASE build entirely.
+ * `import.meta.env.MODE` is replaced with a literal at build time, so under
+ * `--mode live` the whole branch is dead code and Rollup drops the 1.3 MB
+ * fixture chunk with it. A live game has no business shipping a mock library.
  */
 import { RgsClient, type AuthResponse, type PlayResponse } from './RgsClient';
-import { MockRgs } from '../dev/MockRgs';
 import type { BetModeName } from '../types/events';
 import type { LaunchParams } from './params';
+
+/** True in the build that is uploaded to Stake Engine. */
+export const IS_RELEASE = import.meta.env.MODE === 'live';
 
 /** The subset of RGS behaviour the app actually uses. */
 export interface Session {
@@ -37,18 +44,24 @@ class LiveSession implements Session {
   }
 }
 
-class DemoSession implements Session {
-  readonly live = false;
-  private mock = new MockRgs();
-  authenticate(): Promise<AuthResponse> { return this.mock.authenticate(); }
-  play(amount: number, mode: BetModeName): Promise<PlayResponse> {
-    return this.mock.play(amount, mode);
-  }
-  endRound(bet: number): Promise<{ balance: { amount: number; currency: string } }> {
-    return this.mock.endRound(bet);
-  }
-}
+export async function createSession(params: LaunchParams): Promise<Session> {
+  if (params.rgsUrl) return new LiveSession(params);
 
-export function createSession(params: LaunchParams): Session {
-  return params.rgsUrl ? new LiveSession(params) : new DemoSession();
+  if (IS_RELEASE) {
+    // Reaching here in a release build means the host opened the game without
+    // its launch parameters. Say so plainly — the alternative is a game that
+    // looks alive while every bet placed on it is imaginary.
+    throw new Error(
+      'No rgs_url in the launch URL. This build talks only to a real RGS; '
+      + 'it must be opened through the operator lobby.');
+  }
+
+  const { MockRgs } = await import('../dev/MockRgs');
+  const mock = new MockRgs();
+  return {
+    live: false,
+    authenticate: () => mock.authenticate(),
+    play: (amount, mode) => mock.play(amount, mode),
+    endRound: (bet) => mock.endRound(bet),
+  };
 }

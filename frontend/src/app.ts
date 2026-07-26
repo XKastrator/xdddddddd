@@ -10,6 +10,7 @@ import { Application } from 'pixi.js';
 import { BookPlayer } from './game/BookPlayer';
 import { PixiPresenter } from './render/PixiPresenter';
 import { createSession } from './rgs/session';
+import { RgsClientError } from './rgs/RgsClient';
 import { AssetLoader } from './assets/AssetLoader';
 import { AudioManager } from './audio/AudioManager';
 import { WebAudioBackend } from './audio/WebAudioBackend';
@@ -83,7 +84,7 @@ async function main(): Promise<void> {
   });
   const panel = presenter.panel;
 
-  const rgs = createSession(params);
+  const rgs = await createSession(params);
   const auth = await rgs.authenticate();
   loading.set(0.95);
 
@@ -176,8 +177,13 @@ async function main(): Promise<void> {
         bonus: res.round.book.events.some((e) => e.type === 'bonusStart'),
       };
     } catch (e) {
-      notify(e instanceof Error && e.message === 'ERR_IPB'
-        ? t('err.balance') : t('err.round'));
+      // RgsClientError carries the code in `.code`; its `.message` is the
+      // human-readable "RGS ERR_IPB (402)". Comparing against `.message` meant
+      // a live insufficient-balance response showed the generic round-failed
+      // text instead of telling the player what actually happened.
+      const code = e instanceof RgsClientError ? e.code
+        : e instanceof Error ? e.message : '';
+      notify(code === 'ERR_IPB' ? t('err.balance') : t('err.round'));
       return null;
     } finally {
       busy = false;

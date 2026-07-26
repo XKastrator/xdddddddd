@@ -12,8 +12,12 @@
     "devbooks": "python3 src/dev/make_devbooks.py",
     "player": "python3 player/build_player.py && echo 'open frontend/player/index.html'",
     "assets": "python3 ../assets/generate_font.py && python3 ../assets/generate_logo.py && node ../assets/rasterize.mjs && python3 ../assets/import_art.py && python3 ../assets/generate_audio.py",
-    "test": "node tests/autoplay_limits.mjs && node tests/smoke.mjs && node tests/autoplay.mjs",
-    "assets:fallback": "python3 ../assets/generate_art.py && python3 ../assets/generate_scenes.py && python3 ../assets/generate_character.py"
+    "test": "node tests/autoplay_limits.mjs && node tests/smoke.mjs && node tests/autoplay.mjs && node tests/deploy.mjs",
+    "assets:fallback": "python3 ../assets/generate_art.py && python3 ../assets/generate_scenes.py && python3 ../assets/generate_character.py",
+    "build:release": "tsc --noEmit && vite build --mode live --outDir dist-release",
+    "release": "npm run build:release && node tools/package.mjs",
+    "test:release": "node tests/rgs_e2e.mjs",
+    "test:all": "npm run build && npm test && npm run build:release && npm run test:release"
   },
   "devDependencies": {
     "playwright": "^1.61.1",
