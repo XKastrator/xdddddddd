@@ -209,7 +209,40 @@ const expected = (state.balance / U).toFixed(2);
 check('the client shows the server balance, not its own arithmetic',
   shownAfter.replace(/[^0-9.]/g, '') === expected, `${shownAfter} vs ${expected}`);
 
-// --- 3. insufficient balance is surfaced, not swallowed ----------------------
+// --- 3. rgs_url WITHOUT a scheme (the live 405) ------------------------------
+// This is the exact shape that took the first upload down: the parameter
+// arrives as a bare host, fetch treats it as relative, the POST lands on the
+// static host serving the game and comes back 405 Method Not Allowed.
+{
+  const p3 = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  const errs = [];
+  p3.on('pageerror', (e) => errs.push(String(e)));
+  state.calls.length = 0;
+  state.balance = 1000 * U;
+  const bare = `127.0.0.1:${port}/rgs`;               // no scheme, as delivered
+  await p3.goto(`${origin}${BASE}/?sessionID=bare-host&lang=en`
+    + `&rgs_url=${encodeURIComponent(bare)}`, { waitUntil: 'networkidle' });
+  // Wait for a TERMINAL state — booted or failed — rather than for the loading
+  // screen to vanish. Swallowing a timeout here made the assertions race the
+  // page under load and report an empty alert with no ui, which looks like a
+  // regression and is really just an early read.
+  await p3.waitForFunction(
+    () => !!window.__ui || !!document.querySelector('[role="alert"]'),
+    null, { timeout: 60000 }).catch(() => {});
+
+  const alert = await p3.evaluate(() =>
+    document.querySelector('[role="alert"]')?.textContent ?? '');
+  check('schemeless rgs_url still reaches the RGS',
+    state.calls.includes('/rgs/wallet/authenticate'),
+    alert.slice(0, 90).replace(/\s+/g, ' '));
+  check('schemeless rgs_url boots the game',
+    await p3.evaluate(() => !!window.__ui), `alert="${alert.slice(0, 60)}"`);
+  check('no 405 against the page origin',
+    !errs.some((e) => e.includes('405')), errs.slice(0, 1).join(''));
+  await p3.close();
+}
+
+// --- 4. insufficient balance is surfaced, not swallowed ----------------------
 state.balance = 0;
 await page.evaluate(() => window.__ui.spin());
 await page.waitForTimeout(2500);

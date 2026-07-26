@@ -85,11 +85,12 @@ zgodność `payoutMultiplier` między tabelą a książką, cap 15 000×, obecno
 
 | Zestaw | Plik | Checków |
 |---|---|---|
+| Parametry uruchomienia (`rgs_url`) | `frontend/tests/params.mjs` | 14 |
 | Limity autogry (deterministyczne) | `frontend/tests/autoplay_limits.mjs` | 18 |
 | Renderer (mobile + desktop + pl) | `frontend/tests/smoke.mjs` | 36 |
 | Autogra E2E | `frontend/tests/autoplay.mjs` | 12 |
 | Scenariusze serwowania z CDN | `frontend/tests/deploy.mjs` | 12 |
-| **Build wydaniowy przeciw atrapie RGS** | `frontend/tests/rgs_e2e.mjs` | 11 |
+| **Build wydaniowy przeciw atrapie RGS** | `frontend/tests/rgs_e2e.mjs` | 14 |
 | Pliki publikacyjne | `math/tools/verify_publish.py` | 4 tryby |
 
 ```bash
@@ -97,7 +98,7 @@ cd frontend && npm run test:all      # buduje oba warianty i uruchamia wszystko
 python3 math/tools/verify_publish.py
 ```
 
-**89 checków, wszystkie uruchomione.**
+**106 checków, wszystkie uruchomione.**
 
 `rgs_e2e.mjs` stawia serwer implementujący kontrakt portfela Stake Engine
 (`/wallet/authenticate`, `/wallet/play`, `/wallet/end-round`), serwuje
@@ -107,7 +108,21 @@ to, co wyśle prawdziwy RGS.
 
 ---
 
-## 4. Trzy rzeczy, które psuły wdrożenie (naprawione i objęte testem)
+## 4. Cztery rzeczy, które psuły wdrożenie (naprawione i objęte testem)
+
+0. **`rgs_url` bez schematu → HTTP 405 na starcie.** Parametr przychodzi jako
+   sam host (`rgs.example.com`), bez `https://`. Użyty wprost sprawiał, że
+   `fetch('rgs.example.com/wallet/authenticate')` był adresem **względnym** —
+   przeglądarka rozwiązywała go względem strony, POST trafiał w **statyczny
+   host, z którego serwowana jest gra**, a ten na POST odpowiada
+   `405 Method Not Allowed`. Komunikat brzmiał `RGS ERR_GEN (405)`, więc
+   wyglądało to na zepsute API, a nie na zepsutą ścieżkę.
+   `normalizeRgsUrl()` doklejaja protokół strony, obsługuje `//host`, ucina
+   końcowe ukośniki i waliduje przez `new URL`. `RgsClient` **odrzuca**
+   nieabsolutną bazę w konstruktorze, a każdy błąd RGS niesie teraz URL
+   żądania — przy 405 wprost z podpowiedzią, że to statyczny host.
+   Pokryte: `tests/params.mjs` (14 checków) + scenariusz `schemeless rgs_url`
+   w `tests/rgs_e2e.mjs`. Sprawdzone, że bez poprawki test **jest czerwony**.
 
 1. **Ścieżka bez ukośnika na końcu.** Stake Engine serwuje z
    `.../{gameID}/{version}/`, ale URL bywa żądany bez `/`. Przeglądarka
