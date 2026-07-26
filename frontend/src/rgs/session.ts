@@ -23,6 +23,8 @@ export const IS_RELEASE = import.meta.env.MODE === 'live';
 /** The subset of RGS behaviour the app actually uses. */
 export interface Session {
   readonly live: boolean;
+  /** Last request sent to the RGS, for diagnostics. Null for the demo mock. */
+  readonly lastRequest?: { url: string; body: unknown } | null;
   authenticate(): Promise<AuthResponse>;
   play(amount: number, mode: BetModeName): Promise<PlayResponse>;
   endRound(baseBetUnits: number): Promise<{ balance: { amount: number; currency: string } }>;
@@ -31,6 +33,7 @@ export interface Session {
 class LiveSession implements Session {
   readonly live = true;
   private rgs: RgsClient;
+  get lastRequest(): { url: string; body: unknown } | null { return this.rgs.lastRequest; }
   constructor(params: LaunchParams) {
     this.rgs = new RgsClient(params.rgsUrl, params.sessionID);
   }

@@ -47,8 +47,12 @@ export class RgsClient {
   /** The resolved base, surfaced by the boot diagnostics. */
   get base(): string { return this.rgsUrl; }
 
+  /** The last request body sent, for the diagnostics panel. */
+  lastRequest: { url: string; body: unknown } | null = null;
+
   private async post<T>(path: string, body: object): Promise<T> {
     const url = `${this.rgsUrl}${path}`;
+    this.lastRequest = { url, body: { sessionID: this.sessionID, ...body } };
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

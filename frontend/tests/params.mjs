@@ -86,5 +86,40 @@ for (const raw of ['rgs.example.com', '//rgs.example.com', 'https://rgs.example.
   if (!ok) fail.push(`absolute:${raw}`);
 }
 
+// --- bet levels: money must survive 6-decimal integers -----------------------
+// `| 0` truncates to 32 bits, and a $10,000 maxBet is 10_000_000_000 — well past
+// 2^31. A wrapped bound clamps the bet to a nonsense value and /wallet/play
+// answers ERR_VAL, which is indistinguishable from a dead SPIN button.
+const bl = await import(pathToFileURL(await (async () => {
+  const src2 = fs.readFileSync(path.join(HERE, '..', 'src', 'rgs', 'betLevels.ts'), 'utf8')
+    .replace(/^import[^;]+;$/gm, '');
+  const js2 = ts.transpileModule(src2, {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 },
+  }).outputText;
+  const t2 = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'mc-')), 'betLevels.mjs');
+  fs.writeFileSync(t2, js2);
+  return t2;
+})()).href);
+
+const BIG = { minBet: 100_000, maxBet: 10_000_000_000, stepBet: 100_000,
+  defaultBetLevel: 1_000_000, betLevels: [], jurisdiction: {} };
+eq('a huge maxBet is not truncated to 32 bits',
+  bl.snapBet(10_000_000_000, BIG), 10_000_000_000);
+eq('the default bet survives a huge range',
+  bl.defaultBet(BIG, bl.betLevelsFrom(BIG)), 1_000_000);
+{
+  const levels = bl.betLevelsFrom(BIG);
+  const onGrid = levels.every((v) => v % BIG.stepBet === 0);
+  const inRange = levels.every((v) => v >= BIG.minBet && v <= BIG.maxBet);
+  console.log(`${onGrid && inRange && levels.length > 1 ? '  ok  ' : ' FAIL '} `
+    + `derived ladder is on-grid and in range — ${levels.length} levels, `
+    + `${levels[0]}..${levels[levels.length - 1]}`);
+  if (!(onGrid && inRange && levels.length > 1)) fail.push('derived ladder');
+}
+eq('a bet is snapped onto the step grid',
+  bl.snapBet(1_234_567, BIG), 1_200_000);
+eq('a bet below minimum is raised', bl.snapBet(1, BIG), 100_000);
+eq('a bet above maximum is capped', bl.snapBet(99_000_000_000, BIG), 10_000_000_000);
+
 console.log(fail.length ? `\n${fail.length} FAILED` : '\nAll launch-parameter checks passed');
 process.exit(fail.length ? 1 : 0);

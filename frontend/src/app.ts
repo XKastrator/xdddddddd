@@ -354,6 +354,7 @@ async function main(): Promise<void> {
     diagnostics: () => ({
       rgs: params.rgsUrl, session: params.sessionID, live: rgs.live,
       mode, bet, betLevels: BET_LEVELS, config: auth.config, lastError,
+      lastRequest: rgs.lastRequest ?? null,
     }),
     betText: () => formatMoney(costUnits(), currency),
     turboOn: () => turbo,

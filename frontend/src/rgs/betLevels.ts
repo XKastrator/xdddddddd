@@ -14,11 +14,23 @@
  */
 import type { AuthConfig } from './RgsClient';
 
+/**
+ * Read a money field safely.
+ *
+ * `| 0` is a 32-bit signed truncation, and RGS money is an integer with SIX
+ * decimal places — a $10,000 maxBet is 10_000_000_000, which wraps to garbage.
+ * A wrapped maxBet clamps the bet to a nonsense value and /wallet/play answers
+ * ERR_VAL. Money must never be touched by a bitwise operator.
+ */
+function money(v: unknown, fallback = 0): number {
+  return Number.isFinite(v) ? Math.trunc(v as number) : fallback;
+}
+
 /** Bet ladder to offer, always non-empty and always on the stepBet grid. */
 export function betLevelsFrom(cfg: AuthConfig): number[] {
-  const min = Math.max(0, cfg.minBet | 0);
-  const max = Math.max(min, cfg.maxBet | 0);
-  const step = cfg.stepBet > 0 ? cfg.stepBet : Math.max(1, min);
+  const min = Math.max(0, money(cfg.minBet));
+  const max = Math.max(min, money(cfg.maxBet, min));
+  const step = money(cfg.stepBet) > 0 ? money(cfg.stepBet) : Math.max(1, min);
 
   const supplied = Array.isArray(cfg.betLevels) ? cfg.betLevels : [];
   const usable = supplied
@@ -42,9 +54,9 @@ export function betLevelsFrom(cfg: AuthConfig): number[] {
 
 /** Clamp to [minBet, maxBet] and snap onto the stepBet grid. */
 export function snapBet(value: number, cfg: AuthConfig): number {
-  const min = Math.max(0, cfg.minBet | 0);
-  const max = Math.max(min, cfg.maxBet | 0);
-  const step = cfg.stepBet > 0 ? cfg.stepBet : Math.max(1, min);
+  const min = Math.max(0, money(cfg.minBet));
+  const max = Math.max(min, money(cfg.maxBet, min));
+  const step = money(cfg.stepBet) > 0 ? money(cfg.stepBet) : Math.max(1, min);
   const clamped = Math.min(max, Math.max(min, value));
   // round toward the grid, then re-clamp: rounding can push past an endpoint
   // that is not itself a multiple of the step
