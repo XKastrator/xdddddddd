@@ -54,7 +54,13 @@ json.dump(out, sys.stdout)
 console.log(`loaded ${books.length} real books from the published library\n`);
 
 // --- stand-in RGS -----------------------------------------------------------
-const state = { balance: 1000 * U, active: null, calls: [], lastBody: null };
+const state = {
+  balance: 1000 * U, active: null, calls: [], lastBody: null,
+  // knobs the scenarios below flip to model legal RGS variations
+  omitBetLevels: false,
+  pendingRound: null,          // an unfinished round reported by authenticate
+  rejectWhileActive: true,     // a real RGS refuses a bet while a round is open
+};
 const MODE_COST = { base: 1, ante: 1.25, bonus: 100, super: 500 };
 
 const TYPES = {
@@ -102,16 +108,27 @@ const srv = http.createServer((req, res) => {
           config: {
             minBet: 0.1 * U, maxBet: 100 * U, stepBet: 0.1 * U,
             defaultBetLevel: 1 * U,
-            betLevels: [0.2, 0.5, 1, 2, 5, 10].map((v) => v * U),
+            // betLevels is optional per the spec; omitting it must still work
+            ...(state.omitBetLevels
+              ? {}
+              : { betLevels: [0.2, 0.5, 1, 2, 5, 10].map((v) => v * U) }),
             jurisdiction: {
               socialCasino: false, disabledFullscreen: false, disabledTurbo: false,
             },
           },
-          round: state.active ? { active: true, book: state.active.book } : { active: false },
+          round: state.pendingRound
+            ? { active: true, book: state.pendingRound }
+            : state.active ? { active: true, book: state.active.book }
+              : { active: false },
         });
       }
 
       if (url === '/rgs/wallet/play') {
+        // a round already open blocks new bets — this is what silently bricks a
+        // client that never resumes
+        if (state.rejectWhileActive && (state.active || state.pendingRound)) {
+          return json(res, 409, { error: 'ERR_VAL' });
+        }
         const cost = Math.round(body.amount * (MODE_COST[body.mode] ?? 1));
         if (cost > state.balance) return json(res, 402, { error: 'ERR_IPB' });
         const book = books[Math.floor(Math.random() * books.length)];
@@ -124,6 +141,7 @@ const srv = http.createServer((req, res) => {
       }
 
       if (url === '/rgs/wallet/end-round') {
+        state.pendingRound = null;
         if (state.active) {
           // payoutMultiplier is an integer x100 of the BASE bet
           const win = Math.round(state.active.bet * state.active.book.payoutMultiplier / 100);
@@ -242,7 +260,116 @@ check('the client shows the server balance, not its own arithmetic',
   await p3.close();
 }
 
+// --- 3b. a REAL CLICK on the in-canvas SPIN, against the live RGS ------------
+// The pointer-input test runs on the demo build. This is the combination that
+// actually ships: release bundle, real HTTP, real mouse.
+{
+  const p4 = await browser.newPage({ viewport: { width: 1366, height: 820 } });
+  const errs = [];
+  p4.on('pageerror', (e) => errs.push(String(e)));
+  state.calls.length = 0;
+  state.balance = 1000 * U;
+  await p4.goto(`${origin}${BASE}/?sessionID=click-test&lang=en`
+    + `&rgs_url=${encodeURIComponent(`${origin}/rgs`)}`, { waitUntil: 'networkidle' });
+  await p4.waitForFunction(
+    () => !!window.__ui || !!document.querySelector('[role="alert"]'),
+    null, { timeout: 60000 }).catch(() => {});
+
+  const hit = await p4.evaluate(() => window.__ui?.hitPoints?.() ?? null);
+  check('release build draws the in-canvas control bar', !!hit,
+    hit ? 'panel present' : 'NO PANEL — the display font failed to load');
+
+  if (hit) {
+    const box = await p4.$eval('#stage canvas', (c) => {
+      const r = c.getBoundingClientRect();
+      return { x: r.x, y: r.y };
+    });
+    const before = await p4.evaluate(() => window.__ui.balance());
+    await p4.mouse.move(box.x + hit.spin.x, box.y + hit.spin.y);
+    await p4.mouse.down();
+    await p4.mouse.up();
+    await p4.waitForFunction((b) => window.__ui.balance() !== b, before,
+      { timeout: 30000 }).catch(() => {});
+    const after = await p4.evaluate(() => window.__ui.balance());
+    check('a real click on SPIN places a real bet', after !== before,
+      `${before} -> ${after}; calls=${state.calls.join(',') || 'NONE'}`);
+  }
+  check('no page errors on the release build', errs.length === 0,
+    errs.slice(0, 2).join(' | '));
+  await p4.close();
+}
+
+// --- 3c. an interrupted round is resumed, not left blocking forever ----------
+// The spec requires the frontend to continue an active round. While one is
+// open the RGS refuses new bets, so a client that ignores it makes SPIN dead
+// for that player permanently — across reloads, with no way out from the game.
+{
+  const p5 = await browser.newPage({ viewport: { width: 1366, height: 820 } });
+  const errs = [];
+  p5.on('pageerror', (e) => errs.push(String(e)));
+  state.calls.length = 0;
+  state.balance = 1000 * U;
+  state.active = null;
+  state.pendingRound = books[0];                 // a round left open
+  await p5.goto(`${origin}${BASE}/?sessionID=resume-test&lang=en`
+    + `&rgs_url=${encodeURIComponent(`${origin}/rgs`)}`, { waitUntil: 'networkidle' });
+  await p5.waitForFunction(
+    () => !!window.__ui || !!document.querySelector('[role="alert"]'),
+    null, { timeout: 60000 }).catch(() => {});
+
+  await p5.waitForFunction(() => window.__ui?.idle?.() === true,
+    null, { timeout: 60000 }).catch(() => {});
+  check('the open round is ended on boot',
+    state.calls.includes('/rgs/wallet/end-round') && state.pendingRound === null,
+    `calls=${state.calls.join(',')}`);
+
+  // and the player can now actually bet
+  const before = await p5.evaluate(() => window.__ui.balance());
+  await p5.evaluate(() => window.__ui.spin());
+  await p5.waitForFunction((b) => window.__ui.balance() !== b, before,
+    { timeout: 30000 }).catch(() => {});
+  const after = await p5.evaluate(() => window.__ui.balance());
+  check('a bet is possible after resuming', after !== before, `${before} -> ${after}`);
+  check('no page errors while resuming', errs.length === 0, errs.slice(0, 2).join(' | '));
+  await p5.close();
+  state.pendingRound = null;
+}
+
+// --- 3d. betLevels omitted (legal per the spec) ------------------------------
+{
+  const p6 = await browser.newPage({ viewport: { width: 1366, height: 820 } });
+  const errs = [];
+  p6.on('pageerror', (e) => errs.push(String(e)));
+  state.calls.length = 0;
+  state.balance = 1000 * U;
+  state.active = null;
+  state.omitBetLevels = true;
+  await p6.goto(`${origin}${BASE}/?sessionID=no-levels&lang=en`
+    + `&rgs_url=${encodeURIComponent(`${origin}/rgs`)}`, { waitUntil: 'networkidle' });
+  await p6.waitForFunction(
+    () => !!window.__ui || !!document.querySelector('[role="alert"]'),
+    null, { timeout: 60000 }).catch(() => {});
+
+  check('boots with no betLevels in the config',
+    await p6.evaluate(() => !!window.__ui),
+    await p6.evaluate(() => document.querySelector('[role="alert"]')?.textContent?.slice(0, 60) ?? ''));
+  const before = await p6.evaluate(() => window.__ui?.balance?.() ?? '');
+  await p6.evaluate(() => window.__ui?.spin?.());
+  await p6.waitForFunction((b) => window.__ui.balance() !== b, before,
+    { timeout: 30000 }).catch(() => {});
+  check('a bet is placed with a derived bet ladder',
+    (await p6.evaluate(() => window.__ui?.balance?.() ?? '')) !== before,
+    `${before} -> ${await p6.evaluate(() => window.__ui?.balance?.() ?? '')}`);
+  check('no page errors without betLevels', errs.length === 0, errs.slice(0, 2).join(' | '));
+  await p6.close();
+  state.omitBetLevels = false;
+}
+
 // --- 4. insufficient balance is surfaced, not swallowed ----------------------
+// clear any round the earlier scenarios left open, or /wallet/play answers with
+// the active-round rejection instead of the balance one
+state.active = null;
+state.pendingRound = null;
 state.balance = 0;
 await page.evaluate(() => window.__ui.spin());
 await page.waitForTimeout(2500);

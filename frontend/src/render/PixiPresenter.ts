@@ -20,6 +20,7 @@ import { HeatHazeFilter, ShimmerFilter, ChromaticFilter } from './filters';
 import { Background, type SceneTextures } from './Background';
 import { ReelFrame, BAND } from './ReelFrame';
 import { Smith } from './Smith';
+import { Toast } from './Toast';
 import type { AudioManager } from '../audio/AudioManager';
 import type { TextureProvider } from './SymbolSprite';
 import { GlyphFont, GlyphText } from './GlyphText';
@@ -54,6 +55,7 @@ export class PixiPresenter implements Presenter {
   private shimmer = new ShimmerFilter();
   private chroma = new ChromaticFilter();
   private hud = new Container();
+  private toastView: Toast;
   private lblMode: GlyphText; private lblSpins: GlyphText; private lblVault: GlyphText;
   private lblSpinWin: GlyphText; private lblTotal: GlyphText;
   /** In-canvas control bar. Null when no display face was loaded. */
@@ -72,6 +74,7 @@ export class PixiPresenter implements Presenter {
       this.smithHolder.addChild(this.smith);
     }
     this.banner = new WinBanner(assets.font ?? null);
+    this.toastView = new Toast(assets.font ?? null);
     this.heatMeter = new HeatMeter(this.board.width2, 14, assets.font ?? null);
     // The gauge moved BELOW the grid: the band above the board now carries the
     // frame's cartouche, and stacking both there made the two fight for the same
@@ -114,17 +117,16 @@ export class PixiPresenter implements Presenter {
     app.stage.addChild(this.bg, this.smithHolder, this.world, this.coins, this.hud);
     if (this.logo) app.stage.addChild(this.logo);
     if (this.panel) app.stage.addChild(this.panel);
-    app.stage.addChild(this.banner);
+    app.stage.addChild(this.banner, this.toastView);
 
     this.frame.layout(this.board.width2, this.board.height2, BASE_GAP);
     this.frame.setTitle('THE DEEPFORGE');
 
-    // pointer parallax: the room shifts against the camera on desktop
+    // NOTE: no pointer parallax. Tying the room to the cursor made the whole
+    // scene twitch under every mouse move — distracting during play, and it
+    // read as the game reacting to the wrong thing while the controls sat
+    // still. Ambient drift alone carries the depth.
     app.stage.eventMode = 'static';
-    app.stage.on('globalpointermove', (e) => {
-      const w = app.renderer.width, h = app.renderer.height;
-      this.bg.setPointer((e.global.x / w) * 2 - 1, (e.global.y / h) * 2 - 1);
-    });
 
     this.resize(app.renderer.width, app.renderer.height);
     this.showIdleBoard();
@@ -140,6 +142,7 @@ export class PixiPresenter implements Presenter {
         this.shimmer.advance(dt);
       }
       this.smith?.update(dt);
+      this.toastView.update();
       this.board.tickIdle(elapsed, this.reduced);
     });
   }
@@ -207,6 +210,7 @@ export class PixiPresenter implements Presenter {
     this.lblSpins.position.set(w - pad, top + 22);
     this.lblVault.position.set(w - pad, top + 42);
     this.banner.resize(w, playH);
+    this.toastView.resize(w, playH);
     this.placeSmith(w, playH, lay.boardX, lay.boardY, lay.boardH);
     this.placeLogo(w, playH, lay.boardY);
   }
@@ -391,4 +395,12 @@ export class PixiPresenter implements Presenter {
   }
 
   setMode(name: string): void { this.lblMode.text = name.toUpperCase(); }
+
+  /** Player-facing status, drawn on the canvas where the player is looking. */
+  toast(message: string): void { this.toastView.show(message); }
+
+  /** Control positions in stage coordinates (see UiPanel.hitPoints). */
+  hitPoints(): Record<string, { x: number; y: number }> | null {
+    return this.panel?.hitPoints() ?? null;
+  }
 }

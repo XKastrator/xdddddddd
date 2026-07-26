@@ -352,6 +352,29 @@ export class UiPanel extends Container {
     this.modeCaption.text = mode;
   }
 
+  /**
+   * Where each control was actually drawn, in stage coordinates. Exposed so a
+   * test can click the real button rather than a guessed position — the
+   * controls live inside the canvas, so there is no DOM node to target.
+   */
+  hitPoints(): Record<string, { x: number; y: number }> {
+    const pt = (c: Container, cx = 0, cy = 0) => ({
+      x: this.x + c.x + cx, y: this.y + c.y + cy,
+    });
+    return {
+      spin: pt(this.spin),
+      help: pt(this.help),
+      turbo: pt(this.turbo),
+      skip: pt(this.skip),
+      auto: pt(this.auto),
+      // rectangular controls are anchored at their top-left corner
+      betUp: pt(this.betUp, 20, 22),
+      betDown: pt(this.betDown, 20, 22),
+      modeLeft: pt(this.modeLeft, 18, 17),
+      modeRight: pt(this.modeRight, 18, 17),
+    };
+  }
+
   /** Lay the bar out for the given stage size. Returns the height it occupies. */
   layout(w: number, h: number): number {
     const compact = w < 900;

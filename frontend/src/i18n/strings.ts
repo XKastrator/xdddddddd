@@ -18,6 +18,7 @@ const en: Dict = {
 
   'err.balance': 'Insufficient balance for this bet mode.',
   'err.round': 'Round failed. Please try again.',
+  'err.resume': 'Finishing your previous round…',
 
   'auto.title': 'Autoplay',
   'auto.intro': 'Autoplay places the same bet repeatedly. Every round stays independent and random — the limits below only decide when the sequence stops.',
@@ -75,6 +76,7 @@ const pl: Dict = {
 
   'err.balance': 'Niewystarczające saldo dla tego trybu.',
   'err.round': 'Runda nie powiodła się. Spróbuj ponownie.',
+  'err.resume': 'Kończę poprzednią rundę…',
 
   'auto.title': 'Autogra',
   'auto.intro': 'Autogra stawia ten sam zakład wielokrotnie. Każda runda pozostaje niezależna i losowa — poniższe limity decydują wyłącznie o tym, kiedy sekwencja się zatrzyma.',
@@ -132,6 +134,7 @@ const de: Dict = {
 
   'err.balance': 'Nicht genügend Guthaben für diesen Modus.',
   'err.round': 'Runde fehlgeschlagen. Bitte erneut versuchen.',
+  'err.resume': 'Vorherige Runde wird beendet…',
 
   'auto.title': 'Autospiel',
   'auto.intro': 'Das Autospiel setzt denselben Einsatz wiederholt. Jede Runde bleibt unabhängig und zufällig — die Limits unten legen nur fest, wann die Serie endet.',

@@ -23,6 +23,7 @@ import { setLang, t } from './i18n/strings';
 import { formatMoney } from './rgs/currency';
 import { modeInfo } from './game/gameInfo';
 import { readLaunchParams } from './rgs/params';
+import { betLevelsFrom, snapBet, defaultBet } from './rgs/betLevels';
 import type { BetModeName } from './types/events';
 import { MODES } from './game/gameInfo';
 
@@ -96,7 +97,13 @@ async function main(): Promise<void> {
   if (auth.config.jurisdiction.disabledTurbo) panel?.setTurboVisible(false);
 
   const currency = auth.balance.currency;
-  let bet = auth.config.defaultBetLevel;
+  // `betLevels` is OPTIONAL per the RGS spec; what is mandatory is that the bet
+  // sits between minBet and maxBet and divides by stepBet. Reading the array
+  // directly crashes against a legal RGS that omits it, and index-stepping can
+  // walk the bet off the step grid — either way /wallet/play rejects the bet and
+  // SPIN appears dead.
+  const BET_LEVELS = betLevelsFrom(auth.config);
+  let bet = defaultBet(auth.config, BET_LEVELS);
   let mode: BetModeName = 'base';
   let turbo = false;
   let busy = false;
@@ -105,7 +112,6 @@ async function main(): Promise<void> {
   let autoSession: AutoplaySession | null = null;
 
   const $ = (id: string) => document.getElementById(id) as HTMLElement;
-  const BET_LEVELS = auth.config.betLevels;
   let betIdx = Math.max(0, BET_LEVELS.indexOf(bet));
 
   let balanceText = '';
@@ -122,8 +128,14 @@ async function main(): Promise<void> {
     presenter.setMode(mode);
   };
 
-  /** Transient status line under the stage (also used for autoplay outcomes). */
+  /**
+   * Player-facing status. Drawn ON THE CANVAS, and mirrored into the DOM strip
+   * for assistive technology. The DOM-only version was invisible inside an
+   * operator iframe, so a failing round was indistinguishable from a dead
+   * button.
+   */
   const notify = (msg: string) => {
+    presenter.toast(msg);
     const el = document.getElementById('err');
     if (!el) return;
     el.textContent = msg;
@@ -135,6 +147,32 @@ async function main(): Promise<void> {
 
   setBal(auth.balance.amount);
   setCost();
+
+  /**
+   * Resume an interrupted round.
+   *
+   * The RGS spec is explicit: "Frontends should continue the round if it remains
+   * active." Skipping this is not cosmetic — while a round is open the RGS
+   * refuses new bets, so ONE interrupted round makes SPIN do nothing for that
+   * player from then on, across reloads, with no way out from inside the game.
+   */
+  if (auth.round?.active) {
+    try {
+      notify(t('err.resume'));
+      presenter.reduced = true;               // replay briskly; this is catch-up
+      // An active round with no book cannot be replayed, but it still has to be
+      // CLOSED — leaving it open keeps every future bet blocked, which is the
+      // whole failure this handles.
+      if (auth.round.book) await new BookPlayer(auth.round.book, presenter).play();
+      const end = await rgs.endRound(bet);
+      setBal(end.balance.amount);
+    } catch (e) {
+      console.error('[molten-crown] could not resume the open round', e);
+      notify(t('err.round'));
+    } finally {
+      presenter.reduced = reducedWanted();
+    }
+  }
 
   window.addEventListener('resize', () => presenter.resize(app.renderer.width, app.renderer.height));
 
@@ -254,7 +292,7 @@ async function main(): Promise<void> {
   betStepFn = (d) => {
     if (autoSession) return;          // the bet is locked for the whole sequence
     betIdx = Math.max(0, Math.min(BET_LEVELS.length - 1, betIdx + d));
-    bet = BET_LEVELS[betIdx];
+    bet = snapBet(BET_LEVELS[betIdx], auth.config);
     setCost();
   };
   modeStepFn = (d) => {
@@ -290,6 +328,11 @@ async function main(): Promise<void> {
     balance: () => balanceText,
     labels: () => ({ spin: t('ui.spin'), skip: t('ui.skip'), help: t('ui.help') }),
     setMode: (m: BetModeName) => { mode = m; setCost(); },
+    // read-only surface for the pointer-input test: it must be able to find the
+    // in-canvas controls and observe their effect without a DOM node to query
+    hitPoints: () => presenter.hitPoints(),
+    betText: () => formatMoney(costUnits(), currency),
+    turboOn: () => turbo,
     autoplay: () => autoplayFn(),
     stopAuto: () => stopAutoFn(),
     autoRemaining: () => autoSession?.remaining ?? null,

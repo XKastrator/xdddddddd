@@ -86,11 +86,12 @@ zgodność `payoutMultiplier` między tabelą a książką, cap 15 000×, obecno
 | Zestaw | Plik | Checków |
 |---|---|---|
 | Parametry uruchomienia (`rgs_url`) | `frontend/tests/params.mjs` | 14 |
+| **Prawdziwe kliknięcia w kontrolki w canvasie** | `frontend/tests/click.mjs` | 12 |
 | Limity autogry (deterministyczne) | `frontend/tests/autoplay_limits.mjs` | 18 |
 | Renderer (mobile + desktop + pl) | `frontend/tests/smoke.mjs` | 36 |
 | Autogra E2E | `frontend/tests/autoplay.mjs` | 12 |
 | Scenariusze serwowania z CDN | `frontend/tests/deploy.mjs` | 12 |
-| **Build wydaniowy przeciw atrapie RGS** | `frontend/tests/rgs_e2e.mjs` | 14 |
+| **Build wydaniowy przeciw atrapie RGS** | `frontend/tests/rgs_e2e.mjs` | 24 |
 | Pliki publikacyjne | `math/tools/verify_publish.py` | 4 tryby |
 
 ```bash
@@ -98,7 +99,7 @@ cd frontend && npm run test:all      # buduje oba warianty i uruchamia wszystko
 python3 math/tools/verify_publish.py
 ```
 
-**106 checków, wszystkie uruchomione.**
+**128 checków, wszystkie uruchomione.**
 
 `rgs_e2e.mjs` stawia serwer implementujący kontrakt portfela Stake Engine
 (`/wallet/authenticate`, `/wallet/play`, `/wallet/end-round`), serwuje
@@ -108,7 +109,23 @@ to, co wyśle prawdziwy RGS.
 
 ---
 
-## 4. Cztery rzeczy, które psuły wdrożenie (naprawione i objęte testem)
+## 4. Sześć rzeczy, które psuły wdrożenie (naprawione i objęte testem)
+
+-2. **Nieukończona runda blokowała grę na stałe.** Specyfikacja RGS mówi wprost:
+   *„Frontends should continue the round if it remains active"*. `app.ts` tego
+   nie robił. Dopóki runda jest otwarta, RGS **odrzuca nowe zakłady** — więc
+   jedna przerwana runda sprawiała, że SPIN nie robi nic, na zawsze, także po
+   przeładowaniu, bez żadnego wyjścia z poziomu gry. Gra odtwarza teraz otwartą
+   książkę przy starcie i domyka rundę. Sprawdzone, że bez tej poprawki test
+   pokazuje dokładnie ten objaw: `$1000.00 -> $1000.00`.
+
+-1. **`betLevels` jest opcjonalne.** Specyfikacja: *„bet levels are not
+   mandatory"* — obowiązkowe jest tylko, żeby zakład mieścił się w
+   `minBet..maxBet` i dzielił przez `stepBet`. Kod czytał tablicę wprost i
+   przesuwał zakład po indeksach, co przy legalnym RGS bez `betLevels` wywracało
+   start, a przy krokach mogło zejść z siatki `stepBet` → `/wallet/play`
+   odrzuca zakład. `rgs/betLevels.ts` wyprowadza drabinę z `min/max/step`,
+   gdy jej nie ma, i przycina każdy zakład do siatki.
 
 0. **`rgs_url` bez schematu → HTTP 405 na starcie.** Parametr przychodzi jako
    sam host (`rgs.example.com`), bez `https://`. Użyty wprost sprawiał, że
@@ -136,6 +153,15 @@ to, co wyśle prawdziwy RGS.
    nawet przy 404 na całej grafice. Objęte scenariuszem `all artwork 404s`.
 3. **Build zawsze używał mocka.** Rozdzielone na `build` i `build:release`,
    z blokadą w pakowaniu.
+4. **Błędy były niewidoczne.** Status szedł do paska DOM pod canvasem, którego
+   w ramce operatora praktycznie nie widać — nieudana runda wyglądała
+   identycznie jak martwy przycisk. Komunikaty rysują się teraz **na canvasie**
+   (`render/Toast.ts`), a wersja DOM zostaje dla czytników ekranu.
+5. **Kliknięcia nie były testowane.** Wszystkie testy klikały przez
+   `window.__ui`, czyli wołały te same callbacki co przyciski — co nie
+   sprawdzało *w ogóle*, czy da się w nie kliknąć. Kontrolki są rysowane w
+   canvasie, więc zależą wyłącznie od hit-testingu PixiJS. `tests/click.mjs`
+   klika teraz w realnych współrzędnych ekranowych (desktop + mobile).
 
 ## 5. Czego świadomie brakuje
 
@@ -145,5 +171,6 @@ to, co wyśle prawdziwy RGS.
   (`python3 math/game/run.py --pub 100000 --val 1000000`).
 - **Funkcje produktowe**: historia gry, menu ustawień, suwaki głośności,
   siatka zakładów, quick spin, podsumowanie rundy.
-- Atrapa RGS pokrywa `authenticate` / `play` / `end-round` / `ERR_IPB`.
-  **Nie** pokrywa wznowienia przerwanej rundy ani błędów sieci.
+- Atrapa RGS pokrywa `authenticate` / `play` / `end-round` / `ERR_IPB`,
+  wznowienie przerwanej rundy, brak `betLevels` oraz `rgs_url` bez schematu.
+  **Nie** pokrywa błędów sieci ani wygaśnięcia sesji w trakcie rundy.

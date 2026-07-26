@@ -44,7 +44,6 @@ const DEPTH: Record<PlaneName, number> = { far: 0.18, mid: 0.52, near: 1 };
 /** Cover-fit headroom, so a plane can slide without revealing its edge. */
 const OVERSCAN = 1.14;
 const DRIFT_PX = 9;
-const POINTER_PX = 22;
 
 interface ScenePalette {
   rock: number;      // basalt body
@@ -118,8 +117,6 @@ export class Background extends Container {
   private vignette: Sprite;
   private floorGlow: Sprite;
   private current: SceneName = 'base';
-  private px = 0;
-  private py = 0;
   private any = false;
 
   constructor(textures: SceneTextures) {
@@ -213,25 +210,13 @@ export class Background extends Container {
     this.floorGlow.alpha = glowTo;
   }
 
-  /**
-   * Pointer-driven camera. `nx`/`ny` are -1..1 across the stage; on touch there
-   * is no pointer, which is why `drift` runs regardless.
-   */
-  setPointer(nx: number, ny: number): void {
-    this.px = Math.max(-1, Math.min(1, nx));
-    this.py = Math.max(-1, Math.min(1, ny));
-  }
-
-  /** Ambient drift plus the pointer offset, applied per plane depth. */
+  /** Ambient drift, applied per plane depth. */
   drift(seconds: number): void {
     const ax = Math.sin(seconds * 0.25);
     const ay = Math.cos(seconds * 0.18);
     for (const plane of ['far', 'mid', 'near'] as PlaneName[]) {
       const d = DEPTH[plane];
-      this.planes[plane].position.set(
-        (ax * DRIFT_PX - this.px * POINTER_PX) * d,
-        (ay * DRIFT_PX * 0.7 - this.py * POINTER_PX * 0.5) * d,
-      );
+      this.planes[plane].position.set(ax * DRIFT_PX * d, ay * DRIFT_PX * 0.7 * d);
     }
   }
 }
