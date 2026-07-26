@@ -33,11 +33,6 @@ export const AUDIO_IDS = [
 
 export type AudioId = typeof AUDIO_IDS[number];
 
-export interface RigMeta {
-  image: string;
-  frames: Record<string, { x: number; y: number; w: number; h: number;
-    pivot: { x: number; y: number } }>;
-}
 
 import { GlyphFont, type FontMeta } from '../render/GlyphText';
 
@@ -50,9 +45,9 @@ export class AssetLoader {
   private textures = new Map<Sym, Texture>();
   private audio = new Map<string, ArrayBuffer>();
   private scenes: SceneTextures = {};
-  private parts: Record<string, { texture: Texture; pivot: { x: number; y: number } }> = {};
   private glyphFont: GlyphFont | null = null;
   private logoTex: Texture | null = null;
+  private characterTex: Texture | null = null;
   /** Non-fatal load problems, surfaced by the boot diagnostics. */
   readonly warnings: string[] = [];
   loaded = false;
@@ -112,18 +107,9 @@ export class AssetLoader {
     } catch (e) { this.warnings.push(`display face unavailable (${String(e)})`); }
     tick();
 
-    // character rig parts — optional, the game runs without the smith
-    try {
-      const rig: RigMeta = await fetch(`${base}character.json`).then((r) => r.json());
-      const rigSheet: Texture = await Assets.load(`${base}${rig.image}`);
-      for (const [name, f] of Object.entries(rig.frames)) {
-        this.parts[name] = {
-          texture: new Texture({ source: rigSheet.source,
-            frame: new Rectangle(f.x, f.y, f.w, f.h) }),
-          pivot: f.pivot,
-        };
-      }
-    } catch (e) { this.warnings.push(`character rig unavailable (${String(e)})`); }
+    // the smith — optional, the game runs without him
+    try { this.characterTex = await Assets.load(`${base}character.webp`); }
+    catch (e) { this.warnings.push(`character unavailable (${String(e)})`); }
     tick();
 
     // wordmark — optional, the title card falls back to glyph text
@@ -139,9 +125,11 @@ export class AssetLoader {
       const tryLoad = async (file: string): Promise<Texture | undefined> => {
         try { return await Assets.load(`${base}${file}`); } catch { return undefined; }
       };
+      // far planes are opaque JPEG; the mid/near planes need alpha and ship as
+      // WebP, which is 6-8x smaller than the equivalent PNG
       art.far = await tryLoad(`scene_${name}.jpg`);
-      art.mid = await tryLoad(`scene_${name}_mid.png`);
-      art.near = await tryLoad(`scene_${name}_near.png`);
+      art.mid = await tryLoad(`scene_${name}_mid.webp`);
+      art.near = await tryLoad(`scene_${name}_near.webp`);
       this.scenes[name] = art;
       tick();
     }));
@@ -163,7 +151,5 @@ export class AssetLoader {
   sceneTextures(): SceneTextures { return this.scenes; }
   font(): GlyphFont | null { return this.glyphFont; }
   logo(): Texture | null { return this.logoTex; }
-  rigParts(): Record<string, { texture: Texture; pivot: { x: number; y: number } }> {
-    return this.parts;
-  }
+  character(): Texture | null { return this.characterTex; }
 }

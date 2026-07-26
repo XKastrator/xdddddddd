@@ -1,9 +1,12 @@
 # Prompty do wygenerowania assetów (ChatGPT / GPT Image)
 
+> **Status: zrealizowane.** Grafika z tych promptów została dostarczona
+> (22 pliki w `assets/source/`) i wpięta w grę przez `assets/import_art.py`.
+> Ten dokument zostaje jako referencja przy **dogenerowywaniu** brakujących
+> elementów i przy kolejnych tytułach.
+
 Ten plik zawiera gotowe prompty dla **każdego** pliku graficznego, którego
-potrzebuje gra, plus dokładne nazwy plików, rozmiary i formaty. Pliki wrzucone
-do `frontend/public/assets/` wchodzą do gry **bez żadnej zmiany w kodzie** —
-sloty są już zrobione (patrz `ART_BIBLE.md` §17).
+potrzebuje gra, plus dokładne nazwy plików, rozmiary i formaty.
 
 ---
 

@@ -12,7 +12,7 @@ import { symStyle } from './palette';
 export type TextureProvider = (sym: Sym) => Texture | undefined;
 
 /** How much of the cell the authored artwork occupies (glow needs headroom). */
-const ART_FILL = 1.16;
+const ART_FILL = 1.04;
 
 export class SymbolSprite extends Container {
   private glow = new Graphics();
@@ -72,8 +72,11 @@ export class SymbolSprite extends Container {
     this.glow.clear();
     // a soft ember behind hot metal, so the idle flicker has something to modulate
     if (st.glow > 0) {
-      this.glow.circle(s / 2, s / 2, s * 0.44)
-        .fill({ color: st.ring, alpha: 0.10 + 0.14 * st.glow });
+      // The painted artwork already carries its own light, so this is only a
+      // faint bed for the idle flicker to modulate — anything stronger reads as
+      // a halo pasted behind the illustration.
+      this.glow.circle(s / 2, s / 2, s * 0.42)
+        .fill({ color: st.ring, alpha: 0.05 + 0.07 * st.glow });
     }
     this.glow.alpha = 1;
     this.tile.clear();

@@ -45,13 +45,16 @@ frontend/      Frontend (TypeScript, event-driven, PixiJS)
   src/audio/   AudioManager + WebAudioBackend (syntezowane placeholdery)
   src/assets/  AssetLoader (preload atlasu + audio)
   src/dev/     MockRgs + devBooks.json (fixture z realnych książek, tylko DEV)
-  src/render/Rig.ts   animacja kośćmi postaci (odpowiednik Spine, patrz ART_BIBLE §13)
+  src/render/Smith.ts kowal — sprite z oddechem i reakcjami (ART_BIBLE §13)
   src/render/GlyphText.ts + UiPanel.ts  autorski krój pisma i pasek kontrolek w canvasie
-  public/assets/  atlas.png, logo.png, scene_*.jpg, character.png, font.png, lobby.jpg, audio/*.ogg
+  public/assets/  atlas.webp, logo.png, scene_*.jpg + scene_*_mid/near.webp,
+                  character.webp, font.png, lobby.jpg, audio/*.ogg
   src/render/Background.ts  stos paralaksy (far/mid/near) — patrz ART_BIBLE §17
   src/render/ReelFrame.ts   kuta rama bębnów z kartuszem i nitami
   src/game/Autoplay.ts      limity autogry (czysta logika, testowana osobno)
-assets/        Pipeline assetów: generate_art.py, rasterize.mjs, generate_audio.py
+assets/        Pipeline assetów: import_art.py (ilustracja), generate_font/logo.py,
+               rasterize.mjs, generate_audio.py
+  source/      22 dostarczone mastery ilustracji (wejście import_art.py)
   tests/       smoke.mjs — test przeglądarkowy (Playwright)
   player/      self-contained replay harness (index.html) — otwórz w przeglądarce
 ```
@@ -136,8 +139,8 @@ cd frontend && npm run build   # tsc --noEmit + vite build -> dist/
 ```
 Rozmiary bundli: gra **38.8 kB** (14.1 kB gzip), pixi 551 kB (161 kB gzip) w osobnym
 chunku, fixture DEV ładowany leniwie (nie trafia do bundla gry).
-Assety: obrazy **~549 kB** (atlas symboli 339 kB + 3 tła JPEG + postać + lobby tile)
-oraz audio **338 kB** (14 plików OGG).
+Assety: obrazy **~2.6 MB** (atlas 242 kB WebP, 3 plany dalekie JPEG, 3 mid + 3 near
+WebP, postać 182 kB, logo, lobby) oraz audio **338 kB** (14 plików OGG).
 
 ---
 
@@ -156,11 +159,11 @@ Max win **15,000×**. Szczegóły: `PAR_REPORT.md`.
 Warstwa matematyczna, kontrakt eventów **oraz renderer PixiJS** są **uruchamialne i
 przetestowane** w tym środowisku (36/36 checków przeglądarkowych: mobile, desktop,
 locale pl, panel Buy, help screen).
-Grafika (symbole, 3 tła, postać, lobby tile) i audio istnieją jako **realne pliki
-assetów** (autorski wektor → atlas/JPEG; synteza numpy → OGG), a postać jest
-animowana kośćmi — patrz `ART_BIBLE.md` §12–13. Ilustracja malowana przez artystę 2D
-i pliki Spine (brak licencji w tym środowisku), skala symulacji 1M/mode oraz testy
-E2E z realnym RGS to jasno oznaczone kolejne kroki
+Grafika to **dostarczona malowana ilustracja** (13 symboli, 3 sceny × 3 plany
+paralaksy, postać, kafelek lobby) zaimportowana przez `assets/import_art.py` —
+patrz `ART_BIBLE.md` §18. Audio nadal jest syntezowane (numpy → OGG) i **nie ma
+rytmu ani melodii** — to najsłabsze ogniwo oprawy. Skala symulacji 1M/mode oraz
+testy E2E z realnym RGS to jasno oznaczone kolejne kroki
 (`IMPLEMENTATION_PLAN.md`, `QA_REPORT.md`). Nic nie jest deklarowane jako
 „zrobione”, jeśli nie zostało faktycznie uruchomione.
 

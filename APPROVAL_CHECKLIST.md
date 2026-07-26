@@ -97,7 +97,8 @@
 - [x] Renderer PixiJS ✅ (M3 + M3+: Buy panel, help, loading, audio, cząstki, i18n)
 - [x] Symbole jako rozpoznawalne przedmioty, logo jako osobny asset, kuta rama
       bębnów z kartuszem, tło jako stos paralaksy far/mid/near ✅ (ART_BIBLE §16–17)
-- [ ] Malowana ilustracja 2D (postać, plany mid/near) — sloty gotowe, pliki do podmiany (M5)
+- [x] Malowana ilustracja 2D wpięta: 13 symboli, 3 sceny × 3 plany, postać,
+      kafelek lobby ✅ (`assets/import_art.py`, `ART_BIBLE.md` §18)
 - [ ] Audio z rytmem i melodią 🔴 — obecnie drony i akordy (M5)
 - [ ] Testy urządzeń, audyt niezależny, soft‑launch (M7)
 
@@ -112,8 +113,8 @@ wszystko zweryfikowane realnym uruchomieniem (**66/66** checków: 18 logiki limi
 autogry, 36 renderera na mobile/desktop/pl, 12 autogry E2E przez mocka RGS).
 
 Brak autogry z limitami był **blokadą certyfikacyjną** i został zamknięty.
-Otwarte pozostają: malowana ilustracja 2D, audio z rytmem i melodią, funkcje
-produktowe z §7 oraz skala symulacji 1M/mode.
+Otwarte pozostają: **audio z rytmem i melodią** (obecnie drony i akordy — to
+najsłabsze ogniwo oprawy), funkcje produktowe z §7 oraz skala symulacji 1M/mode.
 Do publikacji produkcyjnej pozostają kroki oznaczone 🟡/⬜ (finalne assety/audio,
 skala 1M/mode, testy E2E z RGS, limity operatora) — zebrane w `IMPLEMENTATION_PLAN.md`.
 Nie zadeklarowano jako „zrobione” niczego, co nie zostało faktycznie uruchomione.

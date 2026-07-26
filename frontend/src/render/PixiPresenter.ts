@@ -19,7 +19,7 @@ import { CoinShower, shake } from './juice';
 import { HeatHazeFilter, ShimmerFilter, ChromaticFilter } from './filters';
 import { Background, type SceneTextures } from './Background';
 import { ReelFrame, BAND } from './ReelFrame';
-import { Rig, EMBERWRIGHT_BONES, type PartTextures } from './Rig';
+import { Smith } from './Smith';
 import type { AudioManager } from '../audio/AudioManager';
 import type { TextureProvider } from './SymbolSprite';
 import { GlyphFont, GlyphText } from './GlyphText';
@@ -29,7 +29,7 @@ import type { Texture } from 'pixi.js';
 export interface PresenterAssets {
   getTexture?: TextureProvider;
   scenes?: SceneTextures;
-  rigParts?: PartTextures;
+  character?: Texture | null;
   font?: GlyphFont | null;
   logo?: Texture | null;
   ui?: UiCallbacks;
@@ -41,8 +41,8 @@ const HEAT_CAP: Record<SpinKind, number> = { base: 25, free: 100, super: 10 };
 export class PixiPresenter implements Presenter {
   private bg: Background;
   private world = new Container();
-  private rig: Rig | null = null;
-  private rigHolder = new Container();
+  private smith: Smith | null = null;
+  private smithHolder = new Container();
   private frame: ReelFrame;
   private logo: Sprite | null = null;
   private board: BoardView;
@@ -67,9 +67,9 @@ export class PixiPresenter implements Presenter {
               assets: PresenterAssets = {}) {
     this.bg = new Background(assets.scenes ?? {});
     this.board = new BoardView(COLS, ROWS, BASE_CELL, BASE_GAP, assets.getTexture);
-    if (assets.rigParts && Object.keys(assets.rigParts).length) {
-      this.rig = new Rig(EMBERWRIGHT_BONES, assets.rigParts);
-      this.rigHolder.addChild(this.rig);
+    if (assets.character) {
+      this.smith = new Smith(assets.character);
+      this.smithHolder.addChild(this.smith);
     }
     this.banner = new WinBanner(assets.font ?? null);
     this.heatMeter = new HeatMeter(this.board.width2, 14, assets.font ?? null);
@@ -111,7 +111,7 @@ export class PixiPresenter implements Presenter {
     this.bg.filters = [this.haze];
     this.world.filters = [this.shimmer];
     app.stage.filters = [this.chroma];
-    app.stage.addChild(this.bg, this.rigHolder, this.world, this.coins, this.hud);
+    app.stage.addChild(this.bg, this.smithHolder, this.world, this.coins, this.hud);
     if (this.logo) app.stage.addChild(this.logo);
     if (this.panel) app.stage.addChild(this.panel);
     app.stage.addChild(this.banner);
@@ -139,7 +139,7 @@ export class PixiPresenter implements Presenter {
         this.haze.advance(dt);
         this.shimmer.advance(dt);
       }
-      this.rig?.update(dt);
+      this.smith?.update(dt);
       this.board.tickIdle(elapsed, this.reduced);
     });
   }
@@ -207,7 +207,7 @@ export class PixiPresenter implements Presenter {
     this.lblSpins.position.set(w - pad, top + 22);
     this.lblVault.position.set(w - pad, top + 42);
     this.banner.resize(w, playH);
-    this.placeRig(w, playH, lay.boardX, lay.boardY, lay.boardH);
+    this.placeSmith(w, playH, lay.boardX, lay.boardY, lay.boardH);
     this.placeLogo(w, playH, lay.boardY);
   }
 
@@ -231,28 +231,29 @@ export class PixiPresenter implements Presenter {
 
   /**
    * The smith stands at the forge beside the board. On narrow portrait screens
-   * there is no side room, so he is tucked behind the board's lower edge instead
-   * of being squeezed on top of the grid.
+   * there is no side room, so he stands down entirely rather than being squeezed
+   * on top of the grid.
    */
-  private placeRig(w: number, h: number, boardX: number, boardY: number,
-                   boardH: number): void {
-    if (!this.rig) return;
-    // The figure is set dressing: it must never crowd the grid or be clipped.
-    // It only appears when there is genuine room beside the board.
+  private placeSmith(w: number, h: number, boardX: number, boardY: number,
+                     boardH: number): void {
+    if (!this.smith) return;
+    // He is set dressing: he must never crowd the grid or be clipped. He only
+    // appears when the gutter beside the board is genuinely wide enough.
     const sideRoom = boardX;
-    const wide = sideRoom > w * 0.14;
-    this.rig.visible = wide;
+    const wide = sideRoom > w * 0.13;
+    this.smith.visible = wide;
     if (!wide) return;
 
-    // authored figure is ~410 units tall above the hips (shoulders at -268,
-    // hood reaching ~-410); size it so the whole figure fits the side gutter
-    const RIG_HEIGHT = 430;
-    const byHeight = h * 0.34 / RIG_HEIGHT;
-    const byWidth = (sideRoom * 0.82) / 240;       // authored half-width ~120
-    this.rig.scale.set(Math.min(byHeight, byWidth));
-    // feet (hem) rest on the board's bottom line, tucked into the gutter
-    this.rig.position.set(sideRoom * 0.5, boardY + boardH * 0.86);
-    this.rig.alpha = 0.92;
+    // He is a hero illustration, not a background prop — size him off the play
+    // area and only fall back to the gutter width when that is the tighter
+    // constraint, so he stays substantial on wide screens.
+    const byHeight = (h * 0.66) / this.smith.artHeight;
+    const byWidth = (sideRoom * 0.94) / this.smith.artWidth;
+    this.smith.scale.set(Math.min(byHeight, byWidth));
+    // anchored at the feet, so this is where he STANDS: on the foreground ledge,
+    // a little below the board's bottom line
+    this.smith.position.set(sideRoom * 0.5,
+      Math.min(h * 0.93, boardY + boardH * 1.02));
   }
 
   // --- Presenter contract --------------------------------------------------
@@ -279,7 +280,7 @@ export class PixiPresenter implements Presenter {
     const biggest = Math.max(...fusions.map((f) => f.cells.length));
     const big = biggest >= 7;
     this.audio?.stinger('forge', big ? 'sfx_forge_big' : 'sfx_forge');
-    this.rig?.play('strike');
+    this.smith?.play('strike');
     await this.board.forge(fusions, this.ctx);
     // the hammer landing: impact scales with the size of the group that fused
     void shake(this.world, big ? 9 : 4.5, big ? 300 : 190, this.ctx);
@@ -374,7 +375,7 @@ export class PixiPresenter implements Presenter {
     this.lblTotal.text = `TOTAL ${amount.toFixed(2)}×`;
     if (amount >= 20) {
       this.audio?.stinger('bigwin', 'sting_bigwin');
-      this.rig?.play('cheer');
+      this.smith?.play('cheer');
       this.coins.erupt(this.app.renderer.width, this.app.renderer.height,
                        amount >= 300 ? 44 : 24);
       void shake(this.world, amount >= 300 ? 10 : 6, 380, this.ctx);

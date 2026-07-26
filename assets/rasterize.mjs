@@ -25,16 +25,19 @@ const { chromium } = require('playwright');
 const BUILD = path.join(HERE, 'build');
 const OUT = path.join(HERE, '..', 'frontend', 'public', 'assets');
 
-/** page: html in build/, out: file in public/assets, meta: optional json to copy */
+/**
+ * page: html in build/, out: file in public/assets, meta: optional json to copy
+ *
+ * Only the FONT and the LOGO are rasterised from authored SVG now. Symbols,
+ * scenes, the character and the lobby tile come from delivered illustration via
+ * `assets/import_art.py`; leaving their jobs enabled here would silently
+ * overwrite the real art with the procedural stand-ins every time the asset
+ * pipeline ran. The generators for those stand-ins are kept in the repo (see
+ * ART_BIBLE §12) but are no longer part of the default build.
+ */
 const JOBS = [
-  { page: 'atlas.html', out: 'atlas.png', meta: 'atlas.json', type: 'png' },
-  { page: 'character.html', out: 'character.png', meta: 'character.json', type: 'png' },
   { page: 'font.html', out: 'font.png', meta: 'font.json', type: 'png' },
   { page: 'logo.html', out: 'logo.png', type: 'png' },
-  { page: 'scene_base.html', out: 'scene_base.jpg', type: 'jpeg', quality: 82 },
-  { page: 'scene_bonus.html', out: 'scene_bonus.jpg', type: 'jpeg', quality: 82 },
-  { page: 'scene_super.html', out: 'scene_super.jpg', type: 'jpeg', quality: 82 },
-  { page: 'lobby.html', out: 'lobby.jpg', type: 'jpeg', quality: 88 },
 ];
 
 /** Read the intended pixel size straight from the page's own <svg> attributes. */

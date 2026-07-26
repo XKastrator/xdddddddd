@@ -87,12 +87,11 @@ super_big=2098×, maxwin_*=15000×.
    1M+/mode (percentyle tail 1k–10k dla base/ante, trajektorie bankrolla).
 2. ✅ **Renderer** — PixiJS + panel Buy, help/paytable, loading, WebAudio, cząstki,
    i18n; przetestowany w przeglądarce (36/36).
-3. 🟡 **Assety/audio** — istnieją realne pliki: atlas 13 symboli (przedmioty, nie
-   figury — `ART_BIBLE.md` §16), logo, 3 tła scen (plan daleki), postać
-   (4 części rigu + animacja kośćmi), lobby tile, 14 plików OGG — razem ~1.3 MB,
-   preloadowane i wpięte w grę. Plany **mid** i **near** tła rysują się
-   proceduralnie i przyjmują malowane pliki bez zmiany kodu (`ART_BIBLE.md` §17).
-   Pozostaje: ilustracja malowana przez artystę 2D oraz pliki Spine.
+3. ✅ **Grafika** — **dostarczona malowana ilustracja** jest wpięta: 13 symboli
+   (atlas WebP 242 kB), 3 sceny × 3 plany paralaksy, postać, kafelek lobby —
+   razem ~2.6 MB, preloadowane. Import przez `assets/import_art.py`
+   (klucz chromatyczny + normalizacja + pakowanie), opisany w `ART_BIBLE.md` §18.
+   Zweryfikowane realnym uruchomieniem na mobile i desktopie.
 4. 🟡 **Testy E2E z RGS** — autogra jest testowana przez mocka (12 checków),
    ale resume rundy, błędy sieci i limity salda wymagają pełnego mocka RGS.
 5. 🔴 **Audio bez rytmu i melodii** — bedy to drony i akordy, brak warstwy

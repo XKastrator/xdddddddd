@@ -148,16 +148,28 @@ Placeholdery (obecne w `player/index.html`) zastąpić finalnymi assetami wg pow
 ## 12. Pipeline assetów (jak je wygenerować / podmienić)
 
 ```bash
-cd frontend && npm run assets     # art + atlas + audio, jednym poleceniem
+cd frontend && npm run assets     # krój + logo + import ilustracji + audio
 ```
 Równoważnie:
 ```bash
-python3 assets/generate_art.py       # symbole   -> atlas.html + atlas.json
-python3 assets/generate_scenes.py    # tła + lobby tile
-python3 assets/generate_character.py # części rigu Emberwrighta
-node    assets/rasterize.mjs         # rasteryzacja (headless Chromium) -> PNG/JPEG
+python3 assets/generate_font.py      # krój Emberwright Slab -> font.html + font.json
+python3 assets/generate_logo.py      # wordmark -> logo.html
+node    assets/rasterize.mjs         # rasteryzacja SVG (headless Chromium)
+python3 assets/import_art.py         # ILUSTRACJE z assets/source/ -> atlas + sceny + postać
 python3 assets/generate_audio.py     # synteza numpy -> *.ogg (OGG Vorbis)
 ```
+
+**Symbole, sceny, postać i kafelek lobby pochodzą z dostarczonej ilustracji**
+(`assets/source/`, patrz §18), nie z generatorów proceduralnych. Generatory
+zostały w repo jako awaryjne zastępniki i uruchamia się je osobno:
+
+```bash
+npm run assets:fallback              # generate_art / generate_scenes / generate_character
+```
+
+Zadania rasteryzacji dla atlasu i scen są **celowo wyłączone** w `rasterize.mjs` —
+gdyby zostały włączone, każde przebiegnięcie pipeline'u po cichu nadpisałoby
+prawdziwą grafikę zastępnikami.
 
 ### Co powstaje
 
@@ -199,11 +211,19 @@ wraca do kształtów proceduralnych (gra nadal działa i jest testowalna).
 
 ## 13. Animacja postaci — dlaczego nie Spine (i co jest zamiast)
 
+> **Stan aktualny:** postać to jedna malowana ilustracja, więc rig kostny został
+> wycofany, a `src/render/Rig.ts` usunięty. Zastępuje go `src/render/Smith.ts` —
+> statyczny sprite z oddechem, kołysaniem, migotaniem światła kuźni oraz
+> reakcjami `strike` i `cheer`. Pocięcie jednej ilustracji na kończyny po to, by
+> napędzać ten sam szkielet, rozrywałoby malunek w każdym stawie.
+> Sekcja poniżej opisuje poprzednie rozwiązanie i zostaje jako uzasadnienie
+> decyzji.
+
 **Spine (Esoteric Software) to płatny edytor + runtime.** W tym środowisku nie ma
 ani licencji, ani edytora, więc **nie wygenerowałem plików `.skel`/Spine‑JSON** —
 podrobione pliki Spine byłyby nieuczciwe i i tak nie otworzyłyby się w edytorze.
 
-Zamiast tego `src/render/Rig.ts` implementuje **tę samą ideę wprost**:
+Ówczesny `src/render/Rig.ts` implementował **tę samą ideę wprost**:
 
 | Pojęcie Spine | Odpowiednik w `Rig.ts` |
 |---|---|
@@ -324,3 +344,62 @@ przyjmuje malowany plik; gdy go nie ma, plan rysuje się proceduralnie.
 
 Winieta i poświata podłogi są generowane w kodzie z gradientów radialnych i
 **nie powinny być wypalane w plikach** — inaczej podwoją się.
+
+---
+
+## 18. Dostarczona ilustracja — import i decyzje techniczne
+
+Symbole, sceny, postać i kafelek lobby są **malowaną ilustracją** dostarczoną
+jako 22 pliki w `assets/source/`. `assets/import_art.py` robi z nich cały
+komplet assetów gry; masterów nie ruszamy, więc import jest w pełni odtwarzalny.
+
+### 18.1 Klucz chromatyczny
+
+Ilustracje przychodzą na płaskiej magencie. Klucz **nie jest** progiem
+odległości od koloru — jest **wypełnieniem od krawędzi**:
+
+1. Kolor klucza to **mediana pikseli ramki**, nie nominalne `#FF00FF`. Pliki są
+   stratne i tło dryfuje o kilkanaście poziomów.
+2. Usuwane są tylko te spójne obszary bliskie kluczowi, które **dotykają
+   krawędzi** obrazu. Sam próg odległości albo zjada ametystową rudę i różowe
+   światło konturowe, albo zostawia magentową obwódkę — te kolory leżą w RGB
+   bliżej klucza niż intuicja podpowiada.
+3. **Obszary zamknięte** też muszą zniknąć: prześwit między przedramieniem
+   kowala a trzonkiem młota jest dziurą w sylwetce, nie stykającą się z
+   krawędzią. Takie dziury są niemal czystym kolorem klucza (średnia odległość
+   < 40), a najbliższa im grafika jest > 100 — więc ciasny test średniej usuwa
+   je, nie dotykając niczego malowanego.
+4. **Despill** na pierścieniu półprzezroczystym: magenta zanieczyszcza R i B po
+   równo, więc oba są ściągane w stronę G o nadwyżkę. Bez tego każdy symbol ma
+   różową aureolę widoczną na ciemnej planszy.
+5. Piksele w pełni przezroczyste dostają RGB = 0. GPU interpoluje ich kolor przy
+   próbkowaniu dwuliniowym **niezależnie od alfy**, więc magenta zostawiona „pod
+   zerową alfą" i tak wychodzi na krawędzi.
+
+### 18.2 Normalizacja symboli
+
+Każdy symbol jest przycinany do bounding boxa alfy, skalowany tak, by
+**dłuższy bok** miał 236 px, i centrowany w komórce 256 px. Dopasowanie
+dłuższego boku (a nie wysokości czy pola) sprawia, że szeroki młot i wąski
+miecz czytają się na planszy jako tak samo duże.
+
+### 18.3 Format i waga
+
+| Warstwa | Format | Dlaczego |
+|---|---|---|
+| atlas, plany mid/near, postać | **WebP** | wymagają alfy; ten sam atlas to 1069 kB w PNG i 242 kB w WebP |
+| plany far, kafelek lobby | **JPEG** | nieprzezroczyste, uniwersalnie bezpieczne |
+
+Razem **~2.6 MB** grafiki. W PNG byłoby ~7 MB, co na telefonie gubi gracza
+zanim zobaczy pierwszy spin.
+
+### 18.4 Czego nie ma w plikach
+
+Winieta, poświata podłogi, rama bębnów i cienie rzucane rysuje kod. Wypalone w
+plikach podwoiłyby się z tym, co rysuje renderer.
+
+### 18.5 Plan bliski
+
+Dostarczono **jeden** plan pierwszoplanowy. Jest współdzielony przez trzy stany
+rundy i stopniowany cieplej przy `bonus` i `super` (`warm_grade`), więc
+pierwszy plan również reaguje na rozgrzewanie się pieca.

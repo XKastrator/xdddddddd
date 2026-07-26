@@ -18,12 +18,14 @@ import { Container, Graphics } from 'pixi.js';
 import { GlyphFont, GlyphText } from './GlyphText';
 
 /** Frame band thickness as a multiple of the board gap. */
-export const BAND = 2.9;
+export const BAND = 2.0;
 
-const IRON_DARK = 0x14100c;
-const IRON = 0x241a12;
-const IRON_LIT = 0x4a3524;
-const EDGE = 0x6b5433;
+// Cool iron, not warm brown: the housing sits against painted blue-grey basalt
+// now, and a brown frame read as a cheap box pasted over the artwork.
+const IRON_DARK = 0x0d1016;
+const IRON = 0x1d2530;
+const IRON_LIT = 0x3c4a5a;
+const EDGE = 0x8a6a3c;
 
 export class ReelFrame extends Container {
   private base = new Graphics();
@@ -88,9 +90,11 @@ export class ReelFrame extends Container {
                 r * 0.8)
       .fill({ color: IRON_LIT, alpha: 0.55 });
 
-    // inner recess: the well the symbols drop into
+    // Inner recess: dark enough to seat the symbols, translucent enough that the
+    // painted room still reads behind the grid. Fully opaque black here wasted
+    // the background art the whole scene is built around.
     g.roundRect(-gap * 0.5, -gap * 0.5, w + gap, h + gap, r)
-      .fill({ color: 0x0a0806 });
+      .fill({ color: 0x05070c, alpha: 0.62 });
     // inner bevel — dark on the bottom, hairline highlight along the top
     g.roundRect(-gap * 0.5, -gap * 0.5, w + gap, h + gap, r)
       .stroke({ width: Math.max(2, gap * 0.42), color: 0x000000, alpha: 0.55 });
