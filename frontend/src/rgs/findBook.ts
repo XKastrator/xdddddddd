@@ -13,13 +13,43 @@
  * cannot pick up the wrong thing, and it keeps working whether the server sends
  * `round.book`, `round.state`, `round` itself, or something else entirely.
  */
-import type { Book } from '../types/events';
+import type { Book, GameEvent } from '../types/events';
 
 const MAX_DEPTH = 6;
 
 function looksLikeBook(v: unknown): v is Book {
   return !!v && typeof v === 'object'
     && Array.isArray((v as { events?: unknown }).events);
+}
+
+/**
+ * An events array with no wrapper around it.
+ *
+ * The live RGS does not send a book object at all: it sends
+ * `round.state` — the ordered events, bare — alongside `betID`, `amount`,
+ * `payout`, `payoutMultiplier`, `active` and `mode`. Looking only for a
+ * `.events` key found nothing there, and the round died AFTER the debit.
+ *
+ * Every event in the contract carries a string `type` and a numeric `index`,
+ * and nothing else in a wallet reply is an array of objects shaped like that,
+ * so this cannot pick up the wrong field.
+ */
+function looksLikeEventArray(v: unknown): v is GameEvent[] {
+  if (!Array.isArray(v) || v.length === 0) return false;
+  return v.every((e) => !!e && typeof e === 'object'
+    && typeof (e as { type?: unknown }).type === 'string'
+    && typeof (e as { index?: unknown }).index === 'number');
+}
+
+/** Build a Book from the round that carried a bare events array. */
+function bookFrom(events: GameEvent[], round: Record<string, unknown>): Book {
+  const num = (v: unknown, fallback: number) =>
+    typeof v === 'number' && Number.isFinite(v) ? v : fallback;
+  return {
+    id: num(round.betID ?? round.id ?? round.roundId, 0),
+    events,
+    payoutMultiplier: num(round.payoutMultiplier, 0),
+  };
 }
 
 /**
@@ -33,7 +63,12 @@ export function findBook(root: unknown): Book | null {
     for (const node of level) {
       if (looksLikeBook(node)) return node;
       if (node && typeof node === 'object') {
-        for (const value of Object.values(node as Record<string, unknown>)) {
+        const obj = node as Record<string, unknown>;
+        // a bare events array is the shape the live RGS actually sends
+        for (const value of Object.values(obj)) {
+          if (looksLikeEventArray(value)) return bookFrom(value, obj);
+        }
+        for (const value of Object.values(obj)) {
           if (value && typeof value === 'object') next.push(value);
         }
       }

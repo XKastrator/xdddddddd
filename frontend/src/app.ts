@@ -215,8 +215,12 @@ async function main(): Promise<void> {
   async function playRound(): Promise<{ winUnits: number; bonus: boolean } | null> {
     busy = true;
     panel?.setSpinEnabled(false);
+    // Whether the bet was actually taken. Everything after that point runs with
+    // a round open on the server, and a round left open refuses every later bet.
+    let placed = false;
     try {
       const res = await rgs.play(bet, mode);
+      placed = true;
       setBal(res.balance.amount);
       presenter.skip = false;
       presenter.reduced = turbo || reducedWanted();
@@ -254,6 +258,25 @@ async function main(): Promise<void> {
         console.error('[molten-crown] play failed', lastError);
         notify(status ? `${t('err.round')} · ${code} (${status})`
           : `${t('err.round')} · ${code || 'network'}`);
+      }
+      // `placed` covers the ordinary path; `rgs.roundOpen` covers the one that
+      // actually bit — a 200 from /wallet/play whose payload then failed to
+      // parse, which throws out of `play()` itself and never reaches the line
+      // below the call.
+      if (placed || rgs.roundOpen) {
+        // The bet was taken and a round is open on the server. Whatever failed
+        // afterwards, leaving it open is the one outcome that must not happen:
+        // the RGS refuses every later bet while a round is active, so a single
+        // bad presentation would brick the game for this player — one failed
+        // round, then nothing but "round failed" forever. Closing it also
+        // settles whatever the round actually won, which the player is owed
+        // regardless of whether the animation managed to show it.
+        try {
+          const end = await rgs.endRound(bet);
+          setBal(end.balance.amount);
+        } catch (closeErr) {
+          console.error('[molten-crown] could not close the failed round', closeErr);
+        }
       }
       return null;
     } finally {

@@ -99,7 +99,7 @@ zgodność `payoutMultiplier` między tabelą a książką, cap 15 000×, obecno
 | Renderer (mobile + desktop + pl) | `frontend/tests/smoke.mjs` | 36 |
 | Autogra E2E | `frontend/tests/autoplay.mjs` | 12 |
 | Scenariusze serwowania z CDN | `frontend/tests/deploy.mjs` | 12 |
-| **Build wydaniowy przeciw atrapie RGS** | `frontend/tests/rgs_e2e.mjs` | 50 |
+| **Build wydaniowy przeciw atrapie RGS** | `frontend/tests/rgs_e2e.mjs` | 56 |
 | Pliki publikacyjne | `math/tools/verify_publish.py` | 4 tryby |
 
 ```bash
@@ -107,7 +107,7 @@ cd frontend && npm run test:all      # buduje oba warianty i uruchamia wszystko
 python3 math/tools/verify_publish.py
 ```
 
-**184 checki, wszystkie uruchomione** (`EXIT=0`, zero linii `FAIL`).
+**190 checków, wszystkie uruchomione** (`EXIT=0`, zero linii `FAIL`).
 
 `rgs_e2e.mjs` stawia serwer implementujący kontrakt portfela Stake Engine
 (`/wallet/authenticate`, `/wallet/play`, `/wallet/end-round`), serwuje
@@ -117,7 +117,38 @@ to, co wyśle prawdziwy RGS.
 
 ---
 
-## 4. Dziesięć rzeczy, które psuły wdrożenie (naprawione i objęte testem)
+## 4. Dwanaście rzeczy, które psuły wdrożenie (naprawione i objęte testem)
+
+-8. **Książka rundy to goła tablica w `round.state`.** Żywy RGS nie odsyła
+   obiektu książki w ogóle. Odsyła `round` z polami `betID`, `amount`, `payout`,
+   `payoutMultiplier`, `active`, `mode` i `state` — a `state` **to same eventy,
+   bez opakowania**. Szukanie klucza `events` nie znajdowało tam nic, więc runda
+   padała **już po pobraniu zakładu**.
+
+   Kształt nie jest zgadnięty — podał go serwer. Gdy klient nie znajdzie
+   książki, wypisuje faktyczny kształt odpowiedzi, i to on stoi w logu gracza:
+   `{"round":{"betID","amount","payout","payoutMultiplier","active","mode",
+   "state":"[8]"}}`. Osiem eventów = dokładnie tyle, ile ma runda bazowa.
+
+   `findBook` rozpoznaje teraz także gołą tablicę eventów (każdy event ma
+   `type: string` i `index: number`, nic innego w odpowiedzi portfela tak nie
+   wygląda) i buduje z niej książkę, biorąc `payoutMultiplier` i `betID` z
+   otaczającej rundy. Pięć kształtów w `rgs_e2e.mjs`, w tym `live`.
+
+-7. **Nieudana runda zostawała otwarta — jedna psuła całą sesję.** Zakład jest
+   pobrany i runda otwarta w chwili, gdy `/wallet/play` zwróci 200. Jeżeli
+   cokolwiek później rzuciło, `end-round` nie było wołane nigdy — a otwarta
+   runda blokuje **każdy** następny zakład. Jedna zła odpowiedź i gra była dla
+   tego gracza skończona; w logu widać to jako pętlę „play → 400 → play".
+
+   Teraz po nieudanej rundzie klient ją domyka (i zapisuje graczowi to, co
+   runda wygrała — należy mu się niezależnie od tego, czy animacja się pokazała).
+
+   Pułapka, w którą sam wpadłem przy pierwszym podejściu: książka jest wyciągana
+   **wewnątrz** `RgsClient.play`, więc rzuca z żądania, które serwer już przyjął
+   — flaga „zakład postawiony" ustawiona po powrocie z `play()` nigdy się nie
+   zapala. Dlatego klient wystawia `roundOpen`, ustawiane po statusie 200,
+   **zanim** cokolwiek zacznie parsować.
 
 -6. **Zablokowana runda — gra odmawiała KAŻDEGO zakładu.** Serwer odpowiadał na
    każde `/wallet/play`: `{"error":"ERR_VAL","message":"player has active

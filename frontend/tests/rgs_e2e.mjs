@@ -65,7 +65,7 @@ const state = {
   modesSeen: [],               // every mode string the client actually sent
   // The docs elide the round payload as `"round": { ... }`, so the nesting is
   // undocumented. These are the shapes a server plausibly sends.
-  roundShape: 'book',          // 'book' | 'state' | 'flat' | 'nested'
+  roundShape: 'book',          // 'book' | 'state' | 'flat' | 'nested' | 'live'
   /**
    * How AUTHENTICATE describes a round that is still open.
    *
@@ -182,6 +182,18 @@ const srv = http.createServer((req, res) => {
           state: { state: book, mode: body.mode },
           flat: { ...book, mode: body.mode },
           nested: { bet: { round: { book } }, mode: body.mode },
+          // THE SHAPE THE LIVE RGS ACTUALLY SENDS. There is no book object at
+          // all: `state` is the ordered events, bare, next to the round's own
+          // numbers. Copied from what the live server reported when the client
+          // failed to find a book and printed the response shape it got.
+          live: {
+            betID: 1, amount: body.amount, payout: 0,
+            payoutMultiplier: book.payoutMultiplier,
+            active: true, mode: body.mode, state: book.events,
+          },
+          // a reply the client cannot play at all — the bet is still taken and
+          // the round still opens, which is the case that used to brick the game
+          broken: { betID: 1, amount: body.amount, active: true, mode: body.mode },
         }[state.roundShape];
         return json(res, 200, {
           balance: { amount: state.balance, currency: 'USD' },
@@ -427,6 +439,49 @@ for (const shape of ['status', 'silent']) {
   state.authRoundShape = 'active';
 }
 
+// --- 3c-ter. the round is closed even when the client cannot play it ---------
+// The bet is taken and the round opens the moment /wallet/play returns. If
+// anything after that throws — an unplayable payload, a broken presentation —
+// and the round is left open, the RGS refuses every later bet: ONE bad round
+// and the game is dead for that player.
+{
+  const p5c = await browser.newPage({ viewport: { width: 1366, height: 820 } });
+  const errs = [];
+  p5c.on('pageerror', (e) => errs.push(String(e)));
+  state.calls.length = 0;
+  state.balance = 1000 * U;
+  state.active = null;
+  state.pendingRound = null;
+  state.roundShape = 'broken';
+  await p5c.goto(`${origin}${BASE}/?sessionID=broken-round&lang=en`
+    + `&rgs_url=${encodeURIComponent(`${origin}/rgs`)}`, { waitUntil: 'networkidle' });
+  await p5c.waitForFunction(() => !!window.__ui, null, { timeout: 60000 }).catch(() => {});
+  await p5c.waitForFunction(() => window.__ui?.idle?.() === true,
+    null, { timeout: 60000 }).catch(() => {});
+
+  await p5c.evaluate(() => window.__ui.spin());
+  await p5c.waitForFunction(() => window.__ui?.idle?.() === true,
+    null, { timeout: 40000 }).catch(() => {});
+  check('an unplayable round is still closed',
+    state.calls.filter((c) => c.endsWith('end-round')).length === 1,
+    `calls=${state.calls.join(',')}`);
+  check('the server is left with no open round', state.active === null);
+
+  // ...so the NEXT bet is not refused. This is the whole point.
+  state.roundShape = 'live';
+  const before = await p5c.evaluate(() => window.__ui.balance());
+  await p5c.evaluate(() => window.__ui.spin());
+  await p5c.waitForFunction((b) => window.__ui.balance() !== b, before,
+    { timeout: 40000 }).catch(() => {});
+  const after = await p5c.evaluate(() => window.__ui.balance());
+  check('the next bet goes through after a failed round', after !== before,
+    `${before} -> ${after}`);
+  check('no page errors after a failed round', errs.length === 0,
+    errs.slice(0, 2).join(' | '));
+  await p5c.close();
+  state.roundShape = 'book';
+}
+
 // --- 3d. betLevels omitted (legal per the spec) ------------------------------
 {
   const p6 = await browser.newPage({ viewport: { width: 1366, height: 820 } });
@@ -528,7 +583,7 @@ for (const shape of ['status', 'silent']) {
 // `"round": { ... }` is elided in the docs, and assuming `round.book` produced
 // "cannot read properties of undefined (reading 'events')" against the live RGS
 // — after the bet had already been debited.
-for (const shape of ['book', 'state', 'flat', 'nested']) {
+for (const shape of ['book', 'state', 'flat', 'nested', 'live']) {
   const p8 = await browser.newPage({ viewport: { width: 1366, height: 820 } });
   const errs = [];
   p8.on('pageerror', (e) => errs.push(String(e)));

@@ -27,6 +27,8 @@ export interface Session {
   readonly lastRequest?: { url: string; body: unknown } | null;
   /** Last error response from the RGS, verbatim. */
   readonly lastResponse?: { url: string; status: number; body: string } | null;
+  /** True while the server holds a round this session opened. */
+  readonly roundOpen?: boolean;
   authenticate(): Promise<AuthResponse>;
   play(amount: number, mode: BetModeName): Promise<PlayResponse>;
   endRound(baseBetUnits: number): Promise<{ balance: { amount: number; currency: string } }>;
@@ -39,6 +41,7 @@ class LiveSession implements Session {
   get lastResponse(): { url: string; status: number; body: string } | null {
     return this.rgs.lastResponse;
   }
+  get roundOpen(): boolean { return this.rgs.roundOpen; }
   constructor(params: LaunchParams) {
     this.rgs = new RgsClient(params.rgsUrl, params.sessionID);
   }

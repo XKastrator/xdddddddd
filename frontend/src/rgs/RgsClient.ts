@@ -69,6 +69,17 @@ export class RgsClient {
   /** The last error response received, verbatim. */
   lastResponse: { url: string; status: number; body: string } | null = null;
 
+  /**
+   * True while the server holds a round opened by a bet we placed.
+   *
+   * The caller cannot infer this from `play()` returning or throwing: the book
+   * is extracted INSIDE `play`, so an unreadable payload throws from a request
+   * the server already accepted and charged for. Treating that as "no bet was
+   * placed" left the round open, and an open round refuses every later bet —
+   * one bad payload and the game was over for that player.
+   */
+  roundOpen = false;
+
   private async post<T>(path: string, body: object): Promise<T> {
     const url = `${this.rgsUrl}${path}`;
     this.lastRequest = { url, body: { sessionID: this.sessionID, ...body } };
@@ -182,6 +193,10 @@ export class RgsClient {
 
     const send = async (i: number): Promise<PlayResponse> => {
       const raw = await this.post<Record<string, unknown>>('/wallet/play', variants[i].body);
+      // The bet is placed and the round is open the moment this returns 200 —
+      // BEFORE the book is read out of it. Anything that throws below this line
+      // throws with the player's money already taken.
+      this.roundOpen = true;
       return { ...(raw as unknown as PlayResponse), round: { book: bookOf(raw), mode } };
     };
 
@@ -217,8 +232,10 @@ export class RgsClient {
     throw lastErr;
   }
 
-  endRound(): Promise<{ balance: Balance }> {
-    return this.post('/wallet/end-round', {});
+  async endRound(): Promise<{ balance: Balance }> {
+    const res = await this.post<{ balance: Balance }>('/wallet/end-round', {});
+    this.roundOpen = false;
+    return res;
   }
   /** Persist in-progress action so a disconnected round can resume. */
   event(event: string): Promise<{ event: string }> {
