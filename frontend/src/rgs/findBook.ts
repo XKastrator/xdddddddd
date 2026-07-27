@@ -43,6 +43,56 @@ export function findBook(root: unknown): Book | null {
   return null;
 }
 
+/**
+ * Is the server still holding a round that was never closed?
+ *
+ * While one is open the RGS refuses EVERY bet, so getting this wrong does not
+ * degrade the game — it ends it. The boot path used to test `round.active`,
+ * one spelling out of many, and against the live RGS that test was false while
+ * `/wallet/play` answered `{"error":"ERR_VAL","message":"player has active
+ * round"}` to every single attempt, for that player, across reloads, with no
+ * way out from inside the game.
+ *
+ * So this asks the question several ways instead of once. A false positive
+ * costs one `/wallet/end-round` the server rejects and the caller ignores; a
+ * false negative costs the player the whole game. The bias is deliberate.
+ */
+export function roundLooksActive(root: unknown): boolean {
+  const OPEN = /^(active|open|in[ _-]?progress|pending|started|unfinished|incomplete)$/i;
+  const STATE_KEYS = ['state', 'status', 'roundState', 'roundStatus'];
+  const seen = new Set<object>();
+  const walk = (v: unknown, depth: number): boolean => {
+    if (depth > MAX_DEPTH || !v || typeof v !== 'object') return false;
+    if (seen.has(v as object)) return false;
+    seen.add(v as object);
+    const o = v as Record<string, unknown>;
+    if (o.active === true) return true;
+    // an explicit "not finished" is the same statement worded the other way
+    if (o.completed === false || o.finished === false || o.ended === false) return true;
+    for (const k of STATE_KEYS) {
+      if (typeof o[k] === 'string' && OPEN.test(o[k] as string)) return true;
+    }
+    return Object.values(o).some((x) => walk(x, depth + 1));
+  };
+  // Prefer the round subtree when the server labels one, so unrelated flags
+  // elsewhere in the payload cannot be mistaken for round state.
+  const round = (root as { round?: unknown } | null)?.round;
+  return walk(round !== undefined ? round : root, 0);
+}
+
+/**
+ * Does this refusal mean an unfinished round is blocking the bet?
+ *
+ * Matched on the server's own words because there is no distinct error code
+ * for it — the live RGS returns plain `ERR_VAL`, the same code it uses for a
+ * malformed amount, so the code alone cannot tell "your request is wrong" from
+ * "your previous round is still open".
+ */
+export function isActiveRoundRefusal(body: string): boolean {
+  return /round[^"]{0,40}(active|open|in progress|not (finished|complete))/i.test(body)
+    || /(active|open|unfinished|incomplete)[^"]{0,40}round/i.test(body);
+}
+
 /** Top-level shape of a response, for an error message that is actionable. */
 export function describeShape(root: unknown, depth = 2): string {
   const walk = (v: unknown, d: number): unknown => {

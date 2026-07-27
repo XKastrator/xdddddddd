@@ -4,7 +4,7 @@
  * The client NEVER computes payouts; it only relays server responses.
  */
 import type { Book, BetModeName } from '../types/events';
-import { findBook, describeShape } from './findBook';
+import { findBook, describeShape, roundLooksActive, isActiveRoundRefusal } from './findBook';
 
 export interface Balance { amount: number; currency: string; }
 export interface Jurisdiction {
@@ -104,8 +104,17 @@ export class RgsClient {
   async authenticate(): Promise<AuthResponse> {
     const raw = await this.post<Record<string, unknown>>('/wallet/authenticate', {});
     const res = raw as unknown as AuthResponse;
-    // An active round has to carry its book through, wherever the server put it
-    if (res.round?.active) res.round.book = findBook(raw.round ?? raw) ?? undefined;
+    // Whether a round is still open is decided by SHAPE, not by one key name:
+    // reading `round.active` alone was false against the live RGS while every
+    // bet was being refused for exactly that reason.
+    const active = roundLooksActive(raw);
+    if (active) {
+      res.round = {
+        ...(res.round ?? {}),
+        active: true,
+        book: findBook(raw.round ?? raw) ?? undefined,
+      };
+    }
     return res;
   }
   balance(): Promise<{ balance: Balance }> {
@@ -138,6 +147,33 @@ export class RgsClient {
    * them blind is how a player gets charged twice.
    */
   async play(amount: number, mode: BetModeName): Promise<PlayResponse> {
+    try {
+      return await this.attemptPlay(amount, mode);
+    } catch (e) {
+      const body = e instanceof RgsClientError ? e.responseBody : '';
+      if (this.clearing || !isActiveRoundRefusal(body)) throw e;
+      // The server is holding a round the player never closed. Until it is
+      // closed EVERY bet is refused, so this is not retrying a failed bet —
+      // closing the old round is the only way this player ever bets again.
+      // Safe by the same rule as the mode ladder: a validation refusal means
+      // the bet was rejected before any debit, so the attempt below is a fresh
+      // first bet, not a second charge for the same one.
+      this.clearing = true;
+      try {
+        console.warn('[molten-crown] the RGS is holding an unfinished round; '
+          + 'closing it and placing the bet again');
+        await this.endRound();
+        return await this.attemptPlay(amount, mode);
+      } finally {
+        this.clearing = false;
+      }
+    }
+  }
+
+  /** Guards against looping if `end-round` does not actually clear the round. */
+  private clearing = false;
+
+  private async attemptPlay(amount: number, mode: BetModeName): Promise<PlayResponse> {
     const variants: { label: string; body: Record<string, unknown> }[] = [
       { label: `mode="${mode}"`, body: { amount, mode } },
       { label: `mode="${mode.toUpperCase()}"`, body: { amount, mode: mode.toUpperCase() } },
@@ -167,6 +203,12 @@ export class RgsClient {
           && (e.code === 'ERR_VAL' || (e.status >= 400 && e.status < 500 && e.status !== 402));
         // anything that is not a plain validation refusal may have moved money
         if (!validation) throw e;
+        // "player has active round" is a validation refusal about STATE, not
+        // about the spelling of `mode`. Walking the ladder on it asks the same
+        // rejected question three times and ends on a bogus "invalid amount"
+        // from the no-mode rung — which is what the live console showed. Hand
+        // it back so the caller can close the round instead.
+        if (e instanceof RgsClientError && isActiveRoundRefusal(e.responseBody)) throw e;
         console.warn(`[molten-crown] /wallet/play refused ${variants[i].label}`
           + (e instanceof RgsClientError && e.responseBody
             ? ` — ${e.responseBody.slice(0, 200)}` : ''));

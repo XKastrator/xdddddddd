@@ -99,7 +99,7 @@ zgodność `payoutMultiplier` między tabelą a książką, cap 15 000×, obecno
 | Renderer (mobile + desktop + pl) | `frontend/tests/smoke.mjs` | 36 |
 | Autogra E2E | `frontend/tests/autoplay.mjs` | 12 |
 | Scenariusze serwowania z CDN | `frontend/tests/deploy.mjs` | 12 |
-| **Build wydaniowy przeciw atrapie RGS** | `frontend/tests/rgs_e2e.mjs` | 42 |
+| **Build wydaniowy przeciw atrapie RGS** | `frontend/tests/rgs_e2e.mjs` | 50 |
 | Pliki publikacyjne | `math/tools/verify_publish.py` | 4 tryby |
 
 ```bash
@@ -107,7 +107,7 @@ cd frontend && npm run test:all      # buduje oba warianty i uruchamia wszystko
 python3 math/tools/verify_publish.py
 ```
 
-**176 checków, wszystkie uruchomione** (`EXIT=0`, zero linii `FAIL`).
+**184 checki, wszystkie uruchomione** (`EXIT=0`, zero linii `FAIL`).
 
 `rgs_e2e.mjs` stawia serwer implementujący kontrakt portfela Stake Engine
 (`/wallet/authenticate`, `/wallet/play`, `/wallet/end-round`), serwuje
@@ -117,7 +117,36 @@ to, co wyśle prawdziwy RGS.
 
 ---
 
-## 4. Dziewięć rzeczy, które psuły wdrożenie (naprawione i objęte testem)
+## 4. Dziesięć rzeczy, które psuły wdrożenie (naprawione i objęte testem)
+
+-6. **Zablokowana runda — gra odmawiała KAŻDEGO zakładu.** Serwer odpowiadał na
+   każde `/wallet/play`: `{"error":"ERR_VAL","message":"player has active
+   round"}`. Wznowienie rundy na starcie było, ale zapięte na
+   `auth.round.active === true` — a żywy RGS tego klucza nie wysyła, więc
+   wznowienie nie odpalało nigdy i runda zostawała otwarta na zawsze: dla tego
+   gracza, po każdym przeładowaniu, bez wyjścia od strony gry.
+
+   Dwie naprawy, bo jedna zgaduje kształt ładunku, a już raz to zawiodło:
+   (a) otwartą rundę rozpoznajemy **po kształcie** — `active`, `completed:
+   false`, `status: "ACTIVE"` i pokrewne, zamiast jednej pisowni;
+   (b) niezależnie od tego, gdy `/wallet/play` odmawia z powodu otwartej rundy,
+   klient **zamyka ją i ponawia zakład raz** — to działa bez względu na to, jak
+   serwer opisuje rundę w `authenticate`.
+
+   Bezpieczne pieniężnie tą samą regułą co drabina trybów: odmowa walidacyjna
+   następuje przed pobraniem, więc ponowienie jest pierwszym zakładem, nie
+   drugim obciążeniem.
+
+   Przy okazji: drabina trybów przepalała wszystkie trzy szczeble na tym błędzie
+   (`base`, `BASE`, brak pola → mylące `"invalid amount"`), choć z pisownią
+   trybu nie miał on nic wspólnego. Teraz oddaje go od razu wywołującemu.
+
+   **Atrapa RGS też była winna** — zwracała `round: {active: true, book}`, czyli
+   dokładnie to, czego kod szukał, więc test przechodził, nie testując niczego.
+   Ma teraz trzy dialekty (`active` / `status` / `silent`) i odmowę słowo w słowo
+   jak żywy serwer. Bez poprawki nowe scenariusze są **czerwone**: `modes=base,
+   BASE,<none>`, `$1000.00 -> $1000.00`, zero `end-round` — czyli konsola gracza
+   co do znaku.
 
 -5. **Książka rundy leży nie tam, gdzie zakładałem.** Dokumentacja opisuje
    endpointy portfela precyzyjnie, ale ładunek rundy podaje jako

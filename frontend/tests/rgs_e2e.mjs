@@ -66,8 +66,33 @@ const state = {
   // The docs elide the round payload as `"round": { ... }`, so the nesting is
   // undocumented. These are the shapes a server plausibly sends.
   roundShape: 'book',          // 'book' | 'state' | 'flat' | 'nested'
+  /**
+   * How AUTHENTICATE describes a round that is still open.
+   *
+   * This knob exists because the fixture used to answer `{active:true, book}`
+   * — the exact shape the client tested for — so the resume path passed here
+   * while doing nothing at all against the live RGS, which refused every bet
+   * with "player has active round". A fixture that only speaks the client's
+   * dialect is not testing the client.
+   *
+   *   'active'  { active: true, book }        the documented-ish shape
+   *   'status'  { roundId, status: 'ACTIVE' } open, no `active`, no book
+   *   'silent'  nothing at all                only /wallet/play reveals it
+   */
+  authRoundShape: 'active',
 };
 const MODE_COST = { base: 1, ante: 1.25, bonus: 100, super: 500 };
+
+/** The `round` field of an authenticate reply, in the configured dialect. */
+function describeOpenRound() {
+  const book = state.pendingRound ?? state.active?.book ?? null;
+  if (!book) return { round: { active: false } };
+  switch (state.authRoundShape) {
+    case 'silent': return {};
+    case 'status': return { round: { roundId: 'r-1', status: 'ACTIVE' } };
+    default:       return { round: { active: true, book } };
+  }
+}
 
 const TYPES = {
   '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json',
@@ -122,20 +147,22 @@ const srv = http.createServer((req, res) => {
               socialCasino: false, disabledFullscreen: false, disabledTurbo: false,
             },
           },
-          round: state.pendingRound
-            ? { active: true, book: state.pendingRound }
-            : state.active ? { active: true, book: state.active.book }
-              : { active: false },
+          ...describeOpenRound(),
         });
       }
 
       if (url === '/rgs/wallet/play') {
-        // a round already open blocks new bets — this is what silently bricks a
-        // client that never resumes
-        if (state.rejectWhileActive && (state.active || state.pendingRound)) {
-          return json(res, 409, { error: 'ERR_VAL' });
-        }
+        // A round already open blocks new bets — this is what silently bricks a
+        // client that never resumes. Status and wording copied from the live
+        // RGS: 400 with plain ERR_VAL, the same code it uses for a malformed
+        // amount, so only the message distinguishes them.
+        // recorded BEFORE the refusal: what the client tried is exactly what
+        // the active-round assertions need to see, and pushing it afterwards
+        // made those assertions pass against an empty list
         state.modesSeen.push(body.mode === undefined ? '<none>' : String(body.mode));
+        if (state.rejectWhileActive && (state.active || state.pendingRound)) {
+          return json(res, 400, { error: 'ERR_VAL', message: 'player has active round' });
+        }
         if (state.rejectAnyMode && body.mode !== undefined) {
           // an unknown mode value is a validation refusal — no debit
           return json(res, 400, { error: 'ERR_VAL', message: 'unknown bet mode' });
@@ -355,6 +382,49 @@ check('the client shows the server balance, not its own arithmetic',
   check('no page errors while resuming', errs.length === 0, errs.slice(0, 2).join(' | '));
   await p5.close();
   state.pendingRound = null;
+}
+
+// --- 3c-bis. the server does not spell the open round the way we guessed -----
+// The live failure. `authenticate` never says `active`, so a client that tests
+// for that key resumes nothing, and every /wallet/play comes back
+// {"error":"ERR_VAL","message":"player has active round"} — forever, for that
+// player, across reloads. Two dialects, both must end with a placed bet.
+for (const shape of ['status', 'silent']) {
+  const p5b = await browser.newPage({ viewport: { width: 1366, height: 820 } });
+  const errs = [];
+  p5b.on('pageerror', (e) => errs.push(String(e)));
+  state.calls.length = 0;
+  state.balance = 1000 * U;
+  state.active = null;
+  state.modesSeen.length = 0;
+  state.authRoundShape = shape;
+  state.pendingRound = books[0];
+  await p5b.goto(`${origin}${BASE}/?sessionID=stuck-${shape}&lang=en`
+    + `&rgs_url=${encodeURIComponent(`${origin}/rgs`)}`, { waitUntil: 'networkidle' });
+  await p5b.waitForFunction(() => !!window.__ui, null, { timeout: 60000 }).catch(() => {});
+  await p5b.waitForFunction(() => window.__ui?.idle?.() === true,
+    null, { timeout: 60000 }).catch(() => {});
+
+  const before = await p5b.evaluate(() => window.__ui.balance());
+  await p5b.evaluate(() => window.__ui.spin());
+  await p5b.waitForFunction((b) => window.__ui.balance() !== b, before,
+    { timeout: 40000 }).catch(() => {});
+  const after = await p5b.evaluate(() => window.__ui.balance());
+
+  check(`[auth round '${shape}'] the stuck round is cleared`,
+    state.calls.includes('/rgs/wallet/end-round'), `calls=${state.calls.join(',')}`);
+  check(`[auth round '${shape}'] the player can bet again`, after !== before,
+    `${before} -> ${after}`);
+  // the refusal is about round state, so it must not be mistaken for a bad
+  // mode spelling and burn the whole ladder
+  check(`[auth round '${shape}'] the mode ladder is not burned on it`,
+    state.modesSeen.filter((m) => m === '<none>').length === 0,
+    `modes=${state.modesSeen.join(',')}`);
+  check(`[auth round '${shape}'] no page errors`, errs.length === 0,
+    errs.slice(0, 2).join(' | '));
+  await p5b.close();
+  state.pendingRound = null;
+  state.authRoundShape = 'active';
 }
 
 // --- 3d. betLevels omitted (legal per the spec) ------------------------------

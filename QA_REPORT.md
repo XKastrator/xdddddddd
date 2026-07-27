@@ -111,6 +111,7 @@ super_big=2098×, maxwin_*=15000×.
 | Autogra E2E przez mocka RGS | `frontend/tests/autoplay.mjs` | 12 | ✅ |
 | Renderer (mobile + desktop + pl) | `frontend/tests/smoke.mjs` | 36 | ✅ |
 | Strażnik wydajności (deterministyczny) | `frontend/tests/perfguard.mjs` | 25 | ✅ |
+| Build wydaniowy przeciw atrapie RGS | `frontend/tests/rgs_e2e.mjs` | 50 | ✅ |
 
 Logika limitów jest transpilowana z `src/game/Autoplay.ts` i wykonywana wprost,
 więc arytmetyka limitów jest sprawdzana deterministycznie, a nie „przy okazji"
