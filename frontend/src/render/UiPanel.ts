@@ -24,12 +24,14 @@ export interface UiCallbacks {
   onAutoplay: () => void;
   /** Stop a running autoplay session immediately. */
   onStopAuto: () => void;
+  /** Jump straight into the feature-buy flow (still confirmed before any bet). */
+  onBonus: () => void;
 }
 
 /** Minimum comfortable touch target (WCAG 2.5.5 / mobile casino guidance). */
 const TAP = 44;
 
-type IconName = 'turbo' | 'skip' | 'help' | 'auto';
+type IconName = 'turbo' | 'skip' | 'help' | 'auto' | 'menu';
 
 /**
  * Shared interaction skin: hover lifts, press sinks, disabled dims. Doing this
@@ -169,6 +171,108 @@ function drawIcon(g: Graphics, kind: IconName, s: number, color: number): void {
       g.poly([s * 0.34, -s * 0.92, s * 0.98, -s * 0.62, s * 0.4, -s * 0.2])
         .fill({ color });
       return;
+    case 'menu':
+      for (const dy of [-s * 0.62, 0, s * 0.62]) {
+        g.moveTo(-s * 0.85, dy).lineTo(s * 0.85, dy)
+          .stroke({ width: s * 0.30, color, cap: 'round' });
+      }
+      return;
+  }
+}
+
+/**
+ * The bet stepper as a stacked chevron pair.
+ *
+ * A slot bar has no room for two 44px square buttons beside a readout, and the
+ * reference layouts all solve it the same way: one column, up over down, both
+ * still a full touch target because the hit rectangles meet in the middle
+ * rather than shrinking.
+ */
+class ChevronStack extends Container {
+  private up = new Graphics();
+  private down = new Graphics();
+  private hitUp: Container;
+  private hitDown: Container;
+  private enabled = true;
+
+  constructor(private size: number, onStep: (dir: -1 | 1) => void) {
+    super();
+    this.hitUp = this.arm(this.up, () => onStep(1));
+    this.hitDown = this.arm(this.down, () => onStep(-1));
+    this.addChild(this.hitUp, this.hitDown);
+    this.redraw();
+  }
+
+  private arm(g: Graphics, tap: () => void): Container {
+    const holder = new Container();
+    holder.addChild(g);
+    holder.eventMode = 'static';
+    holder.cursor = 'pointer';
+    holder.on('pointertap', () => { if (this.enabled) tap(); });
+    return holder;
+  }
+
+  setEnabled(v: boolean): void { this.enabled = v; this.alpha = v ? 1 : 0.4; }
+  setSize(s: number): void { this.size = s; this.redraw(); }
+
+  private redraw(): void {
+    const s = this.size;
+    const half = Math.max(TAP / 2, s * 0.9);
+    for (const [g, dir, holder] of
+      [[this.up, -1, this.hitUp], [this.down, 1, this.hitDown]] as
+      [Graphics, number, Container][]) {
+      g.clear();
+      // The apex points AWAY from centre: up-chevron peaks upward, down-chevron
+      // dips downward. Signing these the other way round drew the pair as an X.
+      const cy = dir * s * 0.85;
+      g.moveTo(-s * 0.5, cy - dir * s * 0.28)
+        .lineTo(0, cy + dir * s * 0.28)
+        .lineTo(s * 0.5, cy - dir * s * 0.28)
+        .stroke({ width: s * 0.2, color: 0xffffff, cap: 'round', join: 'round' });
+      holder.hitArea = new Rectangle(-half, cy - half / 2, half * 2, half);
+    }
+  }
+}
+
+/**
+ * The feature-buy entry point: a green pill on the far right.
+ *
+ * Green because it is the one control in the bar that spends a different, much
+ * larger amount than SPIN, and it must never be mistaken for it. It opens the
+ * confirmation panel — it does not place a bet — so the rule that a buy is
+ * always confirmed before money moves is unchanged.
+ */
+class BonusButton extends Control {
+  private bg = new Graphics();
+  private cap: GlyphText;
+  private w = 92;
+  private h = 44;
+
+  constructor(font: GlyphFont | null, text: string, onTap: () => void) {
+    super(onTap);
+    this.cap = new GlyphText(font, { size: 13, tint: 0xffffff, align: 'center',
+      letterSpacing: 2 });
+    this.cap.text = text;
+    this.addChild(this.bg, this.cap);
+    this.redraw();
+  }
+
+  setSize(w: number, h: number): void { this.w = w; this.h = h; this.redraw(); }
+  setText(t: string): void { this.cap.text = t; this.redraw(); }
+  protected restyle(): void { this.redraw(); }
+
+  private redraw(): void {
+    const { w, h } = this;
+    const sink = this.pressed ? 1 : 0;
+    this.bg.clear();
+    this.bg.roundRect(-w / 2, -h / 2 + 3, w, h, h / 2).fill({ color: 0x0a2a12 });
+    this.bg.roundRect(-w / 2, -h / 2 + sink, w, h, h / 2)
+      .fill({ color: this.hovered && this.enabled ? 0x2fbf4f : 0x22a344 });
+    this.bg.roundRect(-w / 2, -h / 2 + sink, w, h * 0.5, h / 2)
+      .fill({ color: 0xffffff, alpha: 0.12 });
+    this.cap.position.set(0, h * 0.14 + sink);
+    this.alpha = this.enabled ? 1 : 0.45;
+    this.hitArea = new Rectangle(-w / 2, -Math.max(h, TAP) / 2, w, Math.max(h, TAP));
   }
 }
 
@@ -194,6 +298,12 @@ class SpinButton extends Control {
   }
 
   setRadius(r: number): void { this.r = r; this.redraw(); }
+  /** Switch the glyph between PLAY and STOP without touching the countdown. */
+  setMode(m: 'spin' | 'stop'): void {
+    if (this.mode === m) return;
+    this.mode = m;
+    this.redraw();
+  }
   /** `remaining` non-null switches the button into autoplay STOP mode. */
   setAuto(remaining: number | null): void {
     this.mode = remaining === null ? 'spin' : 'stop';
@@ -284,15 +394,26 @@ export class UiPanel extends Container {
   private modeCaption: GlyphText;
   private betReadout: Readout;
   private balReadout: Readout;
+  private winReadout: Readout;
+  private menu: RoundButton;
+  private stepper: ChevronStack;
+  private bonus: BonusButton;
   private h = 0;
   private autoRemaining: number | null = null;
   private autoAllowed = true;
+  /** A round is playing — the primary button acts as SKIP. */
+  private busy = false;
 
   constructor(font: GlyphFont | null, cb: UiCallbacks) {
     super();
     this.addChild(this.bar);
     this.spin = new SpinButton(font, () => {
-      if (this.autoRemaining !== null) cb.onStopAuto(); else cb.onSpin();
+      if (this.autoRemaining !== null) cb.onStopAuto();
+      // While a round plays, the primary button IS the skip control. The
+      // reference bars carry no separate skip circle, and a player reaching to
+      // cut a long bonus short reaches for the big button, not a small one.
+      else if (this.busy) cb.onSkip();
+      else cb.onSpin();
     });
     this.skip = new RoundButton('skip', 21, cb.onSkip);
     this.turbo = new RoundButton('turbo', 21, () => this.turbo.setOn(cb.onToggleTurbo()));
@@ -307,24 +428,39 @@ export class UiPanel extends Container {
     this.modeCaption = new GlyphText(font, { size: 9, tint: THEME.dim, align: 'center',
       letterSpacing: 2.6 });
     this.modeCaption.text = 'MODE';
-    this.betReadout = new Readout(font, 'BET', THEME.amber2, 'center');
+    this.betReadout = new Readout(font, 'BET', THEME.amber2, 'left');
     this.balReadout = new Readout(font, 'BALANCE', THEME.txt, 'left');
+    this.winReadout = new Readout(font, 'WIN', THEME.gold, 'left');
+    this.winReadout.set('0.00');
+    this.menu = new RoundButton('menu', 21, cb.onHelp);
+    this.stepper = new ChevronStack(13, (d) => cb.onBetStep(d));
+    this.bonus = new BonusButton(font, 'BONUS', cb.onBonus);
     this.addChild(this.betDown, this.betUp, this.modeLeft, this.modeRight,
       this.modeLabel, this.modeCaption, this.betReadout, this.balReadout,
+      this.winReadout, this.menu, this.stepper, this.bonus,
       this.skip, this.turbo, this.help, this.auto, this.spin);
   }
 
   get height2(): number { return this.h; }
 
   setBalance(v: string): void { this.balReadout.set(v); }
+  /** Round win, shown beside the balance the way the reference bars do. */
+  setWin(v: string): void { this.winReadout.set(v); }
   setBet(v: string): void { this.betReadout.set(v); }
   setMode(v: string): void { this.modeLabel.text = v; }
   setSpinEnabled(v: boolean): void {
-    this.spin.setEnabled(v || this.autoRemaining !== null);
+    this.busy = !v;
+    // never actually disabled: it becomes SKIP instead, so the control under
+    // the player's thumb always does the thing they want next
+    this.spin.setEnabled(true);
+    this.spin.setMode(this.busy ? 'stop' : 'spin');
     // changing the bet mid-round would misreport the cost of the round in flight
     for (const b of [this.betDown, this.betUp, this.modeLeft, this.modeRight]) {
       b.setEnabled(v && this.autoRemaining === null);
     }
+    this.stepper.setEnabled(v && this.autoRemaining === null);
+    // a buy is its own bet: never offered while a round or a session is running
+    this.bonus.setEnabled(v && this.autoRemaining === null);
     this.auto.setEnabled(v && this.autoAllowed && this.autoRemaining === null);
   }
   setTurboVisible(v: boolean): void { this.turbo.visible = v; }
@@ -359,15 +495,17 @@ export class UiPanel extends Container {
     });
     return {
       spin: pt(this.spin),
-      help: pt(this.help),
+      help: pt(this.menu),
       turbo: pt(this.turbo),
-      skip: pt(this.skip),
+      // the primary button is the skip control while a round plays
+      skip: pt(this.spin),
       auto: pt(this.auto),
-      // rectangular controls are anchored at their top-left corner
-      betUp: pt(this.betUp, 20, 22),
-      betDown: pt(this.betDown, 20, 22),
-      modeLeft: pt(this.modeLeft, 18, 17),
-      modeRight: pt(this.modeRight, 18, 17),
+      // `help` names the control that OPENS help, which is the hamburger now
+      menu: pt(this.menu),
+      bonus: pt(this.bonus),
+      // the chevrons share one column: up sits above the centre, down below
+      betUp: pt(this.stepper, 0, -13),
+      betDown: pt(this.stepper, 0, 13),
     };
   }
 
@@ -377,7 +515,9 @@ export class UiPanel extends Container {
     // Portrait stacks three rows — readouts, mode selector, actions — and the
     // action row is a 34px-radius circle, so it needs 68px of its own before any
     // padding. 158 was not enough and the mode label landed inside the button.
-    const barH = compact ? 196 : 116;
+    // Wide is one strip now that the mode selector is gone, so it needs far
+    // less height — and every pixel it gives back goes to the board.
+    const barH = compact ? 158 : 76;
     this.h = barH;
     this.position.set(0, h - barH);
 
@@ -393,68 +533,98 @@ export class UiPanel extends Container {
     return barH;
   }
 
-  /** Desktop / landscape: one row, spin dead centre, clusters on both flanks. */
+  /**
+   * Desktop / landscape: one low strip, read left to right.
+   *
+   * turbo · menu | BALANCE · WIN · BET ⌃⌄ | autoplay · SPIN · BONUS
+   *
+   * The previous bar centred SPIN and pushed everything to the flanks, which
+   * left a 116px band of mostly empty dark plate across the bottom of the
+   * screen and cost the board vertical room. Grouping the money readouts
+   * together and putting the two actions that spend money at the right end
+   * matches how the reference bars are read, and takes 40px less height.
+   */
   private layoutWide(w: number, barH: number, pad: number): void {
     const mid = barH / 2;
-    const r = 40;
-    this.spin.setRadius(r);
-    this.spin.position.set(w / 2, mid);
 
-    // left flank: balance, then the mode selector
-    this.balReadout.position.set(pad, mid - 30);
-    const modeW = 168;
-    const mx = pad + Math.max(150, this.balReadout.width2 + 40);
-    this.modeCaption.visible = true;
-    this.modeCaption.position.set(mx + modeW / 2 + 36, mid - 30);
-    this.modeLeft.setSize(36, 36); this.modeLeft.position.set(mx, mid - 18);
-    this.modeLabel.position.set(mx + modeW / 2 + 36, mid + 6);
-    this.modeRight.setSize(36, 36); this.modeRight.position.set(mx + modeW + 36, mid - 18);
+    // --- left cluster: the two controls that change nothing about the bet ---
+    let x = pad + 24;
+    this.turbo.setRadius(24); this.turbo.position.set(x, mid);
+    x += 58;
+    this.menu.setRadius(22); this.menu.visible = true; this.menu.position.set(x, mid);
 
-    // right flank, laid out from the edge inwards so it never collides
-    let x = w - pad - 21;
-    for (const b of [this.help, this.skip, this.turbo, this.auto]) {
-      b.setRadius(21);
-      b.position.set(x, mid);
-      if (b.visible) x -= 52;
+    // --- money readouts, as one group ---------------------------------------
+    x += 44;
+    const readTop = mid - 22;
+    for (const ro of [this.balReadout, this.winReadout, this.betReadout]) {
+      ro.position.set(x, readTop);
+      x += Math.max(96, ro.width2 + 46);
     }
-    // bet stepper sits between the spin button and the round controls
-    const betCx = (w / 2 + r + 40 + (x + 21)) / 2;
-    this.betDown.setSize(40, TAP); this.betDown.position.set(betCx - 88, mid - TAP / 2);
-    this.betReadout.position.set(betCx, mid - 30);
-    this.betUp.setSize(40, TAP); this.betUp.position.set(betCx + 48, mid - TAP / 2);
+    // the stepper belongs to BET, so it sits immediately after it
+    this.stepper.setSize(13);
+    this.stepper.position.set(x - 22, mid);
+
+    // --- right cluster, laid out from the edge inwards -----------------------
+    const bonusW = 104;
+    this.bonus.setSize(bonusW, 46);
+    this.bonus.position.set(w - pad - bonusW / 2, mid);
+    const spinR = Math.min(34, barH / 2 - 6);
+    this.spin.setRadius(spinR);
+    const spinX = w - pad - bonusW - 18 - spinR;
+    this.spin.position.set(spinX, mid);
+
+    // Help lives behind the hamburger and skip is the primary button while a
+    // round runs, so neither needs a circle of its own.
+    this.skip.visible = false; this.help.visible = false;
+    this.auto.setRadius(22);
+    this.auto.position.set(spinX - spinR - 22 - 22, mid);
+
+    // The mode selector is not in this layout: BONUS is the way into a feature
+    // buy now. The arrows stay in the tree — autoplay and the tests still drive
+    // them — but they are parked off-bar rather than drawn.
+    this.modeCaption.visible = false;
+    for (const b of [this.modeLeft, this.modeRight, this.betDown, this.betUp]) {
+      b.visible = false;
+    }
+    // The mode name sits in the empty span between the money group and the
+    // actions. Parking it under the turbo button put it on top of the button.
+    this.modeLabel.position.set((x + 30 + spinX - spinR - 66) / 2, mid + 5);
   }
 
-  /** Portrait: readouts, then the mode selector, then the action row. */
+  /** Portrait: money on top, actions underneath. Same reading order as wide. */
   private layoutCompact(w: number, barH: number, pad: number): void {
-    // row 1 — readouts and the bet stepper (occupies y 10..54)
-    this.balReadout.position.set(pad, 10);
-    this.betReadout.position.set(w - pad - 60, 10);
-    this.betDown.setSize(38, 38); this.betDown.position.set(w - pad - 156, 16);
-    this.betUp.setSize(38, 38); this.betUp.position.set(w - pad - 38, 16);
+    // row 1 — the money group, spread across the width
+    const readTop = 12;
+    const slot = (w - pad * 2 - 34) / 3;
+    const readouts = [this.balReadout, this.winReadout, this.betReadout];
+    for (let i = 0; i < readouts.length; i++) {
+      readouts[i].position.set(pad + i * slot, readTop);
+    }
+    this.stepper.setSize(12);
+    this.stepper.position.set(w - pad - 12, readTop + 24);
 
-    // row 2 — mode selector, centred (y 62..98)
-    const modeY = 62;
-    const arrowW = 36;
-    const half = Math.min(150, w / 2 - pad - arrowW - 10);
-    this.modeCaption.visible = false;
-    this.modeLeft.setSize(arrowW, 34);
-    this.modeLeft.position.set(w / 2 - half - arrowW, modeY);
-    this.modeLabel.position.set(w / 2, modeY + 24);
-    this.modeRight.setSize(arrowW, 34);
-    this.modeRight.position.set(w / 2 + half, modeY);
-
-    // row 3 — the action row, sized from the bar's own bottom
-    const r = 34;
-    const rowY = barH - r - 20;
+    // row 2 — actions, with the two money-spending controls on the right
+    const rowY = barH - 46;
+    const bonusW = Math.min(96, w * 0.24);
+    this.bonus.setSize(bonusW, 44);
+    this.bonus.position.set(w - pad - bonusW / 2, rowY);
+    const r = 30;
     this.spin.setRadius(r);
-    this.spin.position.set(w / 2, rowY);
-    // secondary controls flank the primary; the spacing is whatever is actually
-    // left between the spin button and the padding, never a fixed guess
-    const room = w / 2 - r - pad - 20;
-    const gap = Math.max(46, Math.min(62, room / 2));
-    this.auto.setRadius(20); this.auto.position.set(w / 2 - r - gap, rowY);
-    this.turbo.setRadius(20); this.turbo.position.set(w / 2 - r - gap * 2, rowY);
-    this.skip.setRadius(20); this.skip.position.set(w / 2 + r + gap, rowY);
-    this.help.setRadius(20); this.help.position.set(w / 2 + r + gap * 2, rowY);
+    const spinX = w - pad - bonusW - 14 - r;
+    this.spin.position.set(spinX, rowY);
+
+    this.skip.visible = false; this.help.visible = false;
+    let x = pad + 21;
+    this.turbo.setRadius(21); this.turbo.position.set(x, rowY);
+    x += 50;
+    this.menu.setRadius(21); this.menu.visible = true; this.menu.position.set(x, rowY);
+    this.auto.setRadius(21);
+    this.auto.position.set(Math.min(x + 50, spinX - r - 30), rowY);
+
+    this.modeCaption.visible = false;
+    for (const b of [this.modeLeft, this.modeRight, this.betDown, this.betUp]) {
+      b.visible = false;
+    }
+    this.modeLabel.position.set(w / 2, readTop + 6);
   }
 }

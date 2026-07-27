@@ -70,6 +70,7 @@ async function main(): Promise<void> {
   let toggleTurboFn: () => boolean = () => false;
   let autoplayFn: () => void = () => {};
   let stopAutoFn: () => void = () => {};
+  let bonusFn: () => void = () => {};
 
   const presenter = new PixiPresenter(app, audio, {
     getTexture: (sym) => assets.texture(sym),
@@ -86,6 +87,7 @@ async function main(): Promise<void> {
       onModeStep: (d) => modeStepFn(d),
       onAutoplay: () => autoplayFn(),
       onStopAuto: () => stopAutoFn(),
+      onBonus: () => bonusFn(),
     },
   });
   const panel = presenter.panel;
@@ -293,7 +295,17 @@ async function main(): Promise<void> {
     // Buy modes require explicit confirmation BEFORE the bet is placed.
     if (modeInfo(mode).isBuy) {
       const ok = await buyPanel.confirm(mode, bet, currency);
-      if (!ok) return;
+      if (!ok) { mode = 'base'; setCost(); return; }
+      try {
+        await playRound();
+      } finally {
+        // BONUS is a one-shot entry point, not a sticky mode. Leaving it set
+        // would make the next tap on SPIN silently cost a hundred times the
+        // bet — the player asked for one feature buy, not a new price.
+        mode = 'base';
+        setCost();
+      }
+      return;
     }
     await playRound();
   }
@@ -340,6 +352,18 @@ async function main(): Promise<void> {
   helpFn = () => { help.render(); help.open(); };
   autoplayFn = () => void startAutoplay();
   stopAutoFn = () => { autoSession?.cancel(); };
+  /**
+   * BONUS opens the feature buy. It selects the mode and runs the ordinary spin
+   * path, which puts the confirmation panel in front of the player — so the
+   * rule that a buy is always confirmed before any money moves is untouched,
+   * and cancelling drops straight back to the base game.
+   */
+  bonusFn = () => {
+    if (busy || autoSession) return;
+    mode = 'bonus';
+    setCost();
+    void spin();
+  };
   toggleTurboFn = () => {
     turbo = !turbo;
     presenter.reduced = turbo || reducedWanted();   // turbo shortens presentation only

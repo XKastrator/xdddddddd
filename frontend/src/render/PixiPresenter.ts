@@ -303,22 +303,32 @@ export class PixiPresenter implements Presenter {
   }
 
   // --- Presenter contract --------------------------------------------------
-  async revealBoard(board: Board, heat: number, kind: SpinKind, _scatters: number): Promise<void> {
+  async revealBoard(board: Board, heat: number, kind: SpinKind, scatters: number): Promise<void> {
     this.kind = kind;
     this.heatMeter.setCap(HEAT_CAP[kind]); this.heatMeter.reset(heat);
-    this.board.setBoard(board);
     this.lblSpinWin.text = 'WIN 0.00×';
+    this.panel?.setWin('0.00×');
     this.audio?.stinger('spin', 'sfx_spin');
     this.audio?.setHeatIntensity(heat, HEAT_CAP[kind]);
     this.setHazeFromHeat(heat, HEAT_CAP[kind]);
-    await wait(this.reduced ? 40 : 220, () => this.skip, this.reduced);
+    // Two scatters already on the board means the columns still to arrive can
+    // finish a trigger, so they are held. Three or more and it is already done
+    // — dragging it out then would be suspense about nothing.
+    this.anticipating = scatters === 2;
+    const holdFrom = this.anticipating ? COLS - 2 : -1;
+    await this.board.reveal(board, this.ctx, holdFrom);
   }
+
+  /** Set while a reveal is deliberately holding its last columns. */
+  private anticipating = false;
 
   async anticipation(scatters: number, needed: number): Promise<void> {
     this.lblSpinWin.text = `CINDERS ${scatters}/${needed}…`;
     this.audio?.stinger('win', 'sfx_cinder');
     void shake(this.world, 2.5, 420, this.ctx);
-    await wait(this.reduced ? 40 : 300, () => this.skip, this.reduced);
+    // The reveal already held the last columns; this is the beat on top of it.
+    await this.board.anticipate(COLS - 2, this.ctx);
+    this.anticipating = false;
   }
 
   async forge(fusions: Fusion[], heat: number): Promise<void> {
@@ -350,6 +360,7 @@ export class PixiPresenter implements Presenter {
   async settleWin(relics: Relic[], _heat: number, win: number): Promise<void> {
     if (win <= 0) return;
     this.lblSpinWin.text = `WIN ${win.toFixed(2)}×`;
+    this.panel?.setWin(`${win.toFixed(2)}×`);
     await this.board.celebrate(relics.map((r) => ({ r: r.r, c: r.c })), this.ctx);
     await wait(this.reduced ? 40 : 200, () => this.skip, this.reduced);
   }
