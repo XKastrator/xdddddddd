@@ -236,6 +236,8 @@ async function main(): Promise<void> {
           code: code || 'unknown', status,
           mode, amount: bet, rgs: params.rgsUrl,
           detail: e instanceof Error ? e.message : String(e),
+          // the RGS's own words about what it disliked
+          response: e instanceof RgsClientError ? e.responseBody : '',
         };
         console.error('[molten-crown] play failed', lastError);
         notify(status ? `${t('err.round')} · ${code} (${status})`
@@ -356,6 +358,7 @@ async function main(): Promise<void> {
       rgs: params.rgsUrl, session: params.sessionID, live: rgs.live,
       mode, bet, betLevels: BET_LEVELS, config: auth.config, lastError,
       lastRequest: rgs.lastRequest ?? null,
+      lastResponse: rgs.lastResponse ?? null,
     }),
     betText: () => formatMoney(costUnits(), currency),
     turboOn: () => turbo,

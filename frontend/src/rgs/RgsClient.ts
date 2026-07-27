@@ -31,8 +31,10 @@ export class RgsClientError extends Error {
    * broken API when the actual cause was the request going to the static host
    * the game was served from. The URL makes that one glance instead of a hunt.
    */
-  constructor(public code: RgsError, public status: number, public url = '') {
-    super(`RGS ${code} (${status})${url ? ` at ${url}` : ''}`);
+  constructor(public code: RgsError, public status: number, public url = '',
+              public responseBody = '') {
+    super(`RGS ${code} (${status})${url ? ` at ${url}` : ''}`
+      + (responseBody ? ` — ${responseBody.slice(0, 300)}` : ''));
   }
 }
 
@@ -64,6 +66,8 @@ export class RgsClient {
 
   /** The last request body sent, for the diagnostics panel. */
   lastRequest: { url: string; body: unknown } | null = null;
+  /** The last error response received, verbatim. */
+  lastResponse: { url: string; status: number; body: string } | null = null;
 
   private async post<T>(path: string, body: object): Promise<T> {
     const url = `${this.rgsUrl}${path}`;
@@ -74,16 +78,25 @@ export class RgsClient {
       body: JSON.stringify({ sessionID: this.sessionID, ...body }),
     });
     if (!res.ok) {
+      // Read the WHOLE body, not just `.error`. A 400 from the RGS normally
+      // explains which field it disliked, and throwing that away left "ERR_VAL
+      // (400)" — which says a request was invalid but not what about it.
+      let raw = '';
+      try { raw = await res.text(); } catch { /* body already consumed */ }
       let code: RgsError = 'ERR_GEN';
-      try { code = (await res.json())?.error ?? code; } catch { /* noop */ }
+      try { code = (JSON.parse(raw) as { error?: RgsError })?.error ?? code; }
+      catch { /* not JSON; the raw text is still reported below */ }
+
+      this.lastResponse = { url, status: res.status, body: raw.slice(0, 1000) };
+
       // 405 from a POST means this hit a static file host, not the RGS —
       // almost always a relative rgs_url resolved against the game's own origin
       if (res.status === 405) {
         throw new RgsClientError(code, 405,
           `${url} (405 on POST means this is a static host, not the RGS — `
-          + 'check that rgs_url is absolute)');
+          + 'check that rgs_url is absolute)', raw);
       }
-      throw new RgsClientError(code, res.status, url);
+      throw new RgsClientError(code, res.status, url, raw);
     }
     return res.json() as Promise<T>;
   }

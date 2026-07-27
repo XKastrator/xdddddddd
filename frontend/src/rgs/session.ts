@@ -25,6 +25,8 @@ export interface Session {
   readonly live: boolean;
   /** Last request sent to the RGS, for diagnostics. Null for the demo mock. */
   readonly lastRequest?: { url: string; body: unknown } | null;
+  /** Last error response from the RGS, verbatim. */
+  readonly lastResponse?: { url: string; status: number; body: string } | null;
   authenticate(): Promise<AuthResponse>;
   play(amount: number, mode: BetModeName): Promise<PlayResponse>;
   endRound(baseBetUnits: number): Promise<{ balance: { amount: number; currency: string } }>;
@@ -34,6 +36,9 @@ class LiveSession implements Session {
   readonly live = true;
   private rgs: RgsClient;
   get lastRequest(): { url: string; body: unknown } | null { return this.rgs.lastRequest; }
+  get lastResponse(): { url: string; status: number; body: string } | null {
+    return this.rgs.lastResponse;
+  }
   constructor(params: LaunchParams) {
     this.rgs = new RgsClient(params.rgsUrl, params.sessionID);
   }
