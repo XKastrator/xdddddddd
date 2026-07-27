@@ -17,6 +17,7 @@
 | Frontend build | `vite build` | bundle produkcyjny + assety | ✅ gra 43.1 kB / 15.7 kB gzip; obrazy 549 kB, audio 338 kB |
 | Player JS | `node --check` | składnia harnessu | ✅ ok |
 | **Renderer w przeglądarce** | `frontend/tests/smoke.mjs` (Playwright/Chromium) | loading screen, canvas, help (RTP+max win+drabina), Escape, spin base/bonus/super, **panel Buy: potwierdzenie i brak zakładu przed Confirm**, anulowanie zakupu, bilans, brak błędów, locale `pl` — mobile 390×844 + desktop 1280×800 | ✅ **36/36** |
+| **Strażnik wydajności** | `frontend/tests/perfguard.mjs` | zegar i ticker wstrzykiwane; zdrowe urządzenie nietknięte, klatki bootowe ignorowane, krok pojedynczy vs podwójny, podłoga tierów, okno wymaga klatek ORAZ czasu, zakładka w tle nie liczy się jako wolne urządzenie, brak automatycznego powrotu jakości | ✅ **25/25** |
 
 **Symulacja (walidacja math):** 4 tryby, publish files wygenerowane, RTP=0.9650
 exact, buckety/feature/P(max) w `PAR_REPORT.md`. ✅
@@ -109,6 +110,7 @@ super_big=2098×, maxwin_*=15000×.
 | Logika limitów (deterministyczna) | `frontend/tests/autoplay_limits.mjs` | 18 | ✅ |
 | Autogra E2E przez mocka RGS | `frontend/tests/autoplay.mjs` | 12 | ✅ |
 | Renderer (mobile + desktop + pl) | `frontend/tests/smoke.mjs` | 36 | ✅ |
+| Strażnik wydajności (deterministyczny) | `frontend/tests/perfguard.mjs` | 25 | ✅ |
 
 Logika limitów jest transpilowana z `src/game/Autoplay.ts` i wykonywana wprost,
 więc arytmetyka limitów jest sprawdzana deterministycznie, a nie „przy okazji"

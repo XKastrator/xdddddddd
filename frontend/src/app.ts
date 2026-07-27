@@ -9,6 +9,7 @@
 import { Application } from 'pixi.js';
 import { BookPlayer } from './game/BookPlayer';
 import { PixiPresenter } from './render/PixiPresenter';
+import { PerfGuard } from './render/PerfGuard';
 import { createSession } from './rgs/session';
 import { RgsClientError } from './rgs/RgsClient';
 import { AssetLoader } from './assets/AssetLoader';
@@ -36,9 +37,13 @@ async function main(): Promise<void> {
 
   const host = document.getElementById('stage') as HTMLDivElement;
   const app = new Application();
+  // Multisampling is worth its fill-rate cost only where a device pixel is
+  // large enough for a stair-step to be visible. At 2x it is not, and the
+  // renderer is fill-bound — so buy the resolution, not the MSAA.
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
   await app.init({
-    background: 0x0a0806, antialias: true, resizeTo: host,
-    resolution: Math.min(2, window.devicePixelRatio || 1), autoDensity: true,
+    background: 0x0a0806, antialias: dpr < 1.5, resizeTo: host,
+    resolution: dpr, autoDensity: true,
     // custom filters ship a GLSL program only; WebGL is also the wider install
     // base on the mobile devices a casino game has to cover
     preference: 'webgl',
@@ -84,6 +89,13 @@ async function main(): Promise<void> {
     },
   });
   const panel = presenter.panel;
+
+  // Watch the frame rate and trade pixels for smoothness if the device cannot
+  // keep up. A slot that stutters is worse than one that is slightly softer,
+  // and the players least able to run it are the ones on the weakest phones.
+  const perf = new PerfGuard(app, presenter, (tier) => {
+    console.info(`[molten-crown] frame rate low — quality tier ${tier}`);
+  });
 
   const rgs = await createSession(params);
   const auth = await rgs.authenticate();
@@ -359,7 +371,12 @@ async function main(): Promise<void> {
       mode, bet, betLevels: BET_LEVELS, config: auth.config, lastError,
       lastRequest: rgs.lastRequest ?? null,
       lastResponse: rgs.lastResponse ?? null,
+      quality: { tier: perf.tier, resolution: app.renderer.resolution },
     }),
+    /** Quality tier chosen by the frame-rate guard. 0 = full. */
+    perfTier: () => perf.tier,
+    /** Force a quality tier. Changes how the game LOOKS, never what it pays. */
+    setQuality: (n: number) => { perf.force(n); return perf.tier; },
     betText: () => formatMoney(costUnits(), currency),
     turboOn: () => turbo,
     autoplay: () => autoplayFn(),
@@ -393,6 +410,7 @@ async function main(): Promise<void> {
   }
 
   await loading.done();
+  perf.start();
 }
 
 /**

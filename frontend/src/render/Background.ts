@@ -130,6 +130,10 @@ export class Background extends Container {
       for (const plane of ['far', 'mid', 'near'] as PlaneName[]) {
         const p = new Plane(art[plane]);
         p.alpha = name === 'base' ? 1 : 0;
+        // An alpha-0 sprite is still DRAWN: Pixi's cull test reads
+        // visible/renderable/measurable, never alpha. Nine full-screen layers
+        // were being rasterised every frame so that three of them could show.
+        p.visible = p.alpha > 0;
         if (art[plane]) this.any = true;
         per[plane] = p;
         wrappers.push(p);
@@ -197,6 +201,9 @@ export class Background extends Container {
     const glowFrom = PALETTES[this.current].glowAlpha;
     const glowTo = PALETTES[name].glowAlpha;
     this.current = name;
+    // both scenes have to be drawn WHILE they cross-fade; only afterwards can
+    // the outgoing one be taken out of the frame entirely
+    for (const c of to) c.visible = true;
     await tween({
       duration: 520, shouldSkip: ctx.shouldSkip, reducedMotion: ctx.reduced,
       onUpdate: (t) => {
@@ -205,8 +212,8 @@ export class Background extends Container {
         this.floorGlow.alpha = glowFrom + (glowTo - glowFrom) * t;
       },
     });
-    for (const c of to) c.alpha = 1;
-    for (const c of from) c.alpha = 0;
+    for (const c of to) { c.alpha = 1; c.visible = true; }
+    for (const c of from) { c.alpha = 0; c.visible = false; }
     this.floorGlow.alpha = glowTo;
   }
 

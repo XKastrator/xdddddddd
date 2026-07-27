@@ -95,6 +95,7 @@ zgodność `payoutMultiplier` między tabelą a książką, cap 15 000×, obecno
 | Parametry uruchomienia + drabina zakładów | `frontend/tests/params.mjs` | 20 |
 | **Prawdziwe kliknięcia w kontrolki w canvasie** | `frontend/tests/click.mjs` | 12 |
 | Limity autogry (deterministyczne) | `frontend/tests/autoplay_limits.mjs` | 18 |
+| Strażnik wydajności (deterministyczny) | `frontend/tests/perfguard.mjs` | 25 |
 | Renderer (mobile + desktop + pl) | `frontend/tests/smoke.mjs` | 36 |
 | Autogra E2E | `frontend/tests/autoplay.mjs` | 12 |
 | Scenariusze serwowania z CDN | `frontend/tests/deploy.mjs` | 12 |
@@ -106,7 +107,7 @@ cd frontend && npm run test:all      # buduje oba warianty i uruchamia wszystko
 python3 math/tools/verify_publish.py
 ```
 
-**151 checków, wszystkie uruchomione.**
+**176 checków, wszystkie uruchomione** (`EXIT=0`, zero linii `FAIL`).
 
 `rgs_e2e.mjs` stawia serwer implementujący kontrakt portfela Stake Engine
 (`/wallet/authenticate`, `/wallet/play`, `/wallet/end-round`), serwuje

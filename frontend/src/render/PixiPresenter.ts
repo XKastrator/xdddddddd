@@ -62,8 +62,20 @@ export class PixiPresenter implements Presenter {
   panel: UiPanel | null = null;
 
   skip = false;
-  reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  private motionOff = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  /**
+   * Set by the frame-rate guard when the device cannot keep up. Folded into
+   * `reduced` so every effect already gated on the accessibility preference is
+   * gated on the performance floor too, without a second flag threaded through
+   * forty call sites. Kept separate from `motionOff` because the app re-asserts
+   * the player's own preference after a round and must not clear this.
+   */
+  lowPower = false;
+  get reduced(): boolean { return this.motionOff || this.lowPower; }
+  set reduced(v: boolean) { this.motionOff = v; }
   private kind: SpinKind = 'base';
+  /** Which filters are currently ATTACHED — see `syncFilters`. */
+  private attached = { haze: false, shimmer: false, chroma: false };
 
   constructor(private app: Application, private audio?: AudioManager,
               assets: PresenterAssets = {}) {
@@ -105,11 +117,9 @@ export class PixiPresenter implements Presenter {
       this.lblTotal);
     if (assets.ui) this.panel = new UiPanel(font, assets.ui);
 
-    // heat haze distorts the scene only; shimmer sweeps the grid; chromatic
-    // aberration is an impact accent applied to the whole stage
-    this.bg.filters = [this.haze];
-    this.world.filters = [this.shimmer];
-    app.stage.filters = [this.chroma];
+    // Heat haze distorts the room; shimmer sweeps the grid; chromatic
+    // aberration is an impact accent on the whole stage. They are attached
+    // ON DEMAND — see `syncFilters`.
     app.stage.addChild(this.bg, this.smithHolder, this.world, this.coins, this.hud);
     if (this.logo) app.stage.addChild(this.logo);
     if (this.panel) app.stage.addChild(this.panel);
@@ -140,7 +150,43 @@ export class PixiPresenter implements Presenter {
       this.smith?.update(dt);
       this.toastView.update();
       this.board.tickIdle(elapsed, this.reduced);
+      this.syncFilters();
     });
+  }
+
+  /**
+   * Attach each filter only while it is actually doing something.
+   *
+   * A filter on a container is not free when its uniform is zero: Pixi still
+   * renders that subtree into an offscreen texture, runs the shader over every
+   * pixel and blits the result back. `stage.filters` did that for the ENTIRE
+   * scene on every frame, so an idle game — which is where a slot spends most
+   * of its life — was paying for three full-screen render-target round trips
+   * to display nothing. Profiling an idle frame put 99.9% of it outside JS, in
+   * rasterisation, and the cost tracked canvas area exactly.
+   *
+   * The booleans mean this assigns only on a transition; `Container.filters`
+   * adds/removes the effect and marks the render group as changed, which is
+   * not something to do sixty times a second for no reason.
+   */
+  private syncFilters(): void {
+    const want = {
+      haze: !this.reduced && this.haze.strength > 0.01,
+      shimmer: !this.reduced && this.shimmer.strength > 0.001,
+      chroma: !this.reduced && this.chroma.amount > 0.001,
+    };
+    if (want.haze !== this.attached.haze) {
+      this.bg.filters = want.haze ? [this.haze] : null;
+      this.attached.haze = want.haze;
+    }
+    if (want.shimmer !== this.attached.shimmer) {
+      this.world.filters = want.shimmer ? [this.shimmer] : null;
+      this.attached.shimmer = want.shimmer;
+    }
+    if (want.chroma !== this.attached.chroma) {
+      this.app.stage.filters = want.chroma ? [this.chroma] : null;
+      this.attached.chroma = want.chroma;
+    }
   }
 
   /** Fill the grid with ore before the first spin so the game never looks empty. */

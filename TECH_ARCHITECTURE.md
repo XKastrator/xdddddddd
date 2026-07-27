@@ -161,3 +161,68 @@ Faktyczny `index.json` (wygenerowany):
   assetów bonusu/super, kompresja audio, brak alokacji w pętli animacji, pooling
   cząstek. Portrait/landscape/desktop layouty przez CSS/kontener.
 - Skip: `BookPlayer.skip()` skraca bieżącą animację (wynik niezmienny).
+
+### 7.1 Pomiar (ZROBIONE — wykonany, nie szacowany)
+
+Profil CPU klatki bezczynnej (Chromium headless, CDP `Profiler`, 6 s, próbka
+200 µs): **99,9 % czasu poza JS**, w rasteryzacji. Koszt klatki skaluje się z
+LICZBĄ PIKSELI kanwy niemal dokładnie — 3,1× więcej pikseli kosztowało 3,05×
+więcej czasu. Renderer jest więc ograniczony fill‑rate'em, nie CPU.
+
+Środowisko pomiaru: kontener BEZ GPU (ANGLE/SwiftShader, rasteryzacja
+programowa). Liczby bezwzględne NIE przenoszą się na urządzenia graczy —
+przenosi się kształt zależności.
+
+| konfiguracja (viewport 1280×800, SwiftShader) | mediana klatki |
+|---|---|
+| stan wyjściowy: tier 0, filtry stale podpięte, 9 warstw tła | ~1285 ms |
+| tier 1 (bez post‑processingu) | ~1273 ms |
+| tier 3 (kanwa 640×369, bez post‑processingu) | ~425 ms |
+| tier 3 + `antialias: false` (pomiar rozpoznawczy) | ~344 ms |
+| **stan końcowy: tier 3 + ukryte warstwy alpha‑0** | **~257 ms** |
+
+Wnioski:
+
+(a) Same filtry NIE były dominującym kosztem (tier 1 dał ~1 %), ale trzy
+pełnoekranowe przebiegi render‑target na klatkę przy zerowym efekcie były czystą
+stratą — `syncFilters()` podpina je dopiero gdy realnie coś robią.
+
+(b) Jedyną skuteczną dźwignią jest liczba pikseli — stąd `PerfGuard`.
+
+(c) **Pixi rysuje sprite'y o `alpha = 0`.** Test widoczności w
+`collectRenderablesMixin` czyta `globalDisplayStatus` (visible/renderable/
+measurable) i nigdy alpha. Tło trzyma 3 sceny × 3 plany = 9 pełnoekranowych
+warstw, z czego widoczne są 3 — sześć rasteryzowało się co klatkę, żeby nie być
+widocznym. Ustawienie `visible = false` poza cross‑fade'em ścięło klatkę z
+~425 ms do ~257 ms (‑40 %). To zysk na KAŻDYM tierze i na prawdziwym sprzęcie
+także, nie tylko w rasteryzacji programowej.
+
+(d) MSAA kosztuje ~20 % klatki, dlatego `antialias` włączamy tylko przy
+`devicePixelRatio < 1.5`, gdzie piksel urządzenia jest na tyle duży, że
+schodkowanie widać.
+
+### 7.2 `PerfGuard` — degradacja jakości
+
+Mierzy czas klatki własnym zegarem (`Ticker.deltaMS` jest przycinane do
+`maxElapsedMS` = 100 ms, więc cały interesujący zakres byłby niewidoczny).
+Okno zamyka się po 45 klatkach LUB po 1500 ms przy min. 4 klatkach — im wolniejsze
+urządzenie, tym szybciej zapada decyzja. Mediana > 40 ms (25 fps) → krok w dół;
+mediana > 160 ms → dwa kroki naraz.
+
+| tier | co gasi |
+|---|---|
+| 1 | post‑processing + ruch ambientowy (`lowPower`) |
+| 2 | render w 3/4 rozdzielczości |
+| 3 | render w 1/2 rozdzielczości (podłoga: 0.5) |
+
+Degradacja jest JEDNOKIERUNKOWA — strażnik, który też podnosi jakość, oscyluje
+(schodzi, klatki wracają *bo* zszedł, wraca w górę). Jakość wraca przy kolejnym
+załadowaniu strony. Layout nie zależy od rozdzielczości: `renderer.width/height`
+są w jednostkach logicznych, a `autoDensity` utrzymuje rozmiar CSS kanwy.
+Zweryfikowane w źródle Pixi: `TextureSource.resize` bez argumentu rozdzielczości
+zachowuje bieżącą (`resolution || this._resolution`), więc obrót ekranu nie
+cofa degradacji.
+
+Testy: `frontend/tests/perfguard.mjs` (25 asercji) — zegar i ticker
+wstrzykiwane, więc reguły są sprawdzane na czasach klatek dyktowanych przez test,
+a nie przez czekanie, aż maszyna zwolni.
