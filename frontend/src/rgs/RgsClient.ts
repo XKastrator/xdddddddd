@@ -112,47 +112,69 @@ export class RgsClient {
     return this.post('/wallet/balance', {});
   }
   /**
-   * Bet mode casing that the RGS actually accepted, remembered for the session.
-   * `null` until the first successful play.
+   * Which request variant the RGS actually accepted, remembered for the session
+   * so later bets go straight to it instead of re-probing every round.
    */
-  private modeCase: 'as-is' | 'upper' | null = null;
+  private playVariant: number | null = null;
 
   /**
    * amount is the base bet in 6-dp integer units; mode multiplies the debit.
    *
-   * The mode string has to match what the RGS published for this game, and the
-   * two sources disagree on case: the math SDK names modes lowercase
-   * (`name="base"`) while the RGS docs' play example sends `"mode": "BASE"`.
-   * Rather than guess, the first bet tries the name as configured and, if the
-   * RGS answers with a VALIDATION error, retries once in upper case.
+   * The `mode` value has to match what the RGS published for this game, and
+   * three plausible spellings exist with no way to tell them apart from the
+   * client:
    *
-   * This cannot double-bill: a validation rejection means the bet was refused,
-   * so no debit happened and the retry is a fresh first attempt. Any other
-   * failure (balance, session, network) is rethrown untouched — those may have
-   * moved money and must never be retried blind.
+   *   1. the name as configured — the math SDK writes modes lowercase
+   *      (`name="base"` in src/config/betmode.py)
+   *   2. upper case — the RGS docs' own play example sends `"mode": "BASE"`
+   *   3. no `mode` field at all — a game published with a single default mode
+   *      can reject any mode string as an unknown value
+   *
+   * So the first bet of a session walks that ladder and stops at whichever the
+   * server accepts. This cannot double-bill: every step is taken ONLY after a
+   * VALIDATION rejection, which means the bet was refused and no money moved,
+   * making the next attempt a fresh first bet. Balance, session and network
+   * failures are rethrown untouched — those may have moved money, and retrying
+   * them blind is how a player gets charged twice.
    */
   async play(amount: number, mode: BetModeName): Promise<PlayResponse> {
-    const send = async (m: string): Promise<PlayResponse> => {
-      const raw = await this.post<Record<string, unknown>>('/wallet/play', { amount, mode: m });
+    const variants: { label: string; body: Record<string, unknown> }[] = [
+      { label: `mode="${mode}"`, body: { amount, mode } },
+      { label: `mode="${mode.toUpperCase()}"`, body: { amount, mode: mode.toUpperCase() } },
+      { label: 'no mode field', body: { amount } },
+    ];
+
+    const send = async (i: number): Promise<PlayResponse> => {
+      const raw = await this.post<Record<string, unknown>>('/wallet/play', variants[i].body);
       return { ...(raw as unknown as PlayResponse), round: { book: bookOf(raw), mode } };
     };
 
-    if (this.modeCase === 'upper') return send(mode.toUpperCase());
-    try {
-      const res = await send(mode);
-      this.modeCase = 'as-is';
-      return res;
-    } catch (e) {
-      const validation = e instanceof RgsClientError
-        && (e.code === 'ERR_VAL' || (e.status >= 400 && e.status < 500 && e.status !== 402));
-      if (!validation || this.modeCase !== null) throw e;
-      const res = await send(mode.toUpperCase());
-      this.modeCase = 'upper';
-      console.warn(`[molten-crown] RGS wanted the bet mode upper-cased ("${
-        mode.toUpperCase()}"); using that for this session`);
-      return res;
+    if (this.playVariant !== null) return send(this.playVariant);
+
+    let lastErr: unknown;
+    for (let i = 0; i < variants.length; i++) {
+      try {
+        const res = await send(i);
+        this.playVariant = i;
+        if (i > 0) {
+          console.warn(`[molten-crown] the RGS accepted /wallet/play with `
+            + `${variants[i].label}; using that for this session`);
+        }
+        return res;
+      } catch (e) {
+        lastErr = e;
+        const validation = e instanceof RgsClientError
+          && (e.code === 'ERR_VAL' || (e.status >= 400 && e.status < 500 && e.status !== 402));
+        // anything that is not a plain validation refusal may have moved money
+        if (!validation) throw e;
+        console.warn(`[molten-crown] /wallet/play refused ${variants[i].label}`
+          + (e instanceof RgsClientError && e.responseBody
+            ? ` — ${e.responseBody.slice(0, 200)}` : ''));
+      }
     }
+    throw lastErr;
   }
+
   endRound(): Promise<{ balance: Balance }> {
     return this.post('/wallet/end-round', {});
   }

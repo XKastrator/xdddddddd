@@ -61,6 +61,7 @@ const state = {
   pendingRound: null,          // an unfinished round reported by authenticate
   rejectWhileActive: true,     // a real RGS refuses a bet while a round is open
   requireUpperMode: false,     // model an RGS that publishes modes upper-cased
+  rejectAnyMode: false,        // model a game published with one default mode
   modesSeen: [],               // every mode string the client actually sent
   // The docs elide the round payload as `"round": { ... }`, so the nesting is
   // undocumented. These are the shapes a server plausibly sends.
@@ -134,12 +135,16 @@ const srv = http.createServer((req, res) => {
         if (state.rejectWhileActive && (state.active || state.pendingRound)) {
           return json(res, 409, { error: 'ERR_VAL' });
         }
-        state.modesSeen.push(String(body.mode));
+        state.modesSeen.push(body.mode === undefined ? '<none>' : String(body.mode));
+        if (state.rejectAnyMode && body.mode !== undefined) {
+          // an unknown mode value is a validation refusal — no debit
+          return json(res, 400, { error: 'ERR_VAL', message: 'unknown bet mode' });
+        }
         if (state.requireUpperMode && body.mode !== String(body.mode).toUpperCase()) {
           // validation rejection: nothing is debited, exactly as a real RGS
           return json(res, 400, { error: 'ERR_VAL' });
         }
-        const key = String(body.mode).toLowerCase();
+        const key = String(body.mode ?? 'base').toLowerCase();
         const cost = Math.round(body.amount * (MODE_COST[key] ?? 1));
         if (cost > state.balance) return json(res, 402, { error: 'ERR_IPB' });
         const book = books[Math.floor(Math.random() * books.length)];
@@ -480,6 +485,51 @@ for (const shape of ['book', 'state', 'flat', 'nested']) {
   await p8.close();
 }
 state.roundShape = 'book';
+
+// --- 3h. an RGS that rejects every `mode` value -------------------------------
+// A game published with a single default mode answers ERR_VAL to any mode
+// string. The probe's last rung is a request with no `mode` field at all; every
+// rung is only reached after a validation refusal, so nothing was ever debited.
+{
+  const p9 = await browser.newPage({ viewport: { width: 1366, height: 820 } });
+  const errs = [];
+  p9.on('pageerror', (e) => errs.push(String(e)));
+  state.calls.length = 0;
+  state.modesSeen.length = 0;
+  state.balance = 1000 * U;
+  state.active = null;
+  state.pendingRound = null;
+  state.rejectAnyMode = true;
+  await p9.goto(`${origin}${BASE}/?sessionID=no-mode&lang=en`
+    + `&rgs_url=${encodeURIComponent(`${origin}/rgs`)}`, { waitUntil: 'networkidle' });
+  await p9.waitForFunction(
+    () => !!window.__ui || !!document.querySelector('[role="alert"]'),
+    null, { timeout: 60000 }).catch(() => {});
+
+  const before = await p9.evaluate(() => window.__ui?.balance?.() ?? '');
+  await p9.evaluate(() => window.__ui?.spin?.());
+  await p9.waitForFunction((b) => window.__ui.balance() !== b, before,
+    { timeout: 30000 }).catch(() => {});
+  const after = await p9.evaluate(() => window.__ui?.balance?.() ?? '');
+  check('a bet succeeds against an RGS that rejects every mode value',
+    after !== before, `${before} -> ${after}; sent = ${state.modesSeen.join(',')}`);
+  check('the probe walked the whole ladder and stopped at no-mode',
+    state.modesSeen.length === 3 && state.modesSeen[2] === '<none>',
+    state.modesSeen.join(','));
+
+  // the accepted variant is reused rather than re-probed
+  await p9.waitForFunction(() => window.__ui.idle(), null, { timeout: 60000 }).catch(() => {});
+  state.modesSeen.length = 0;
+  const before2 = await p9.evaluate(() => window.__ui?.balance?.() ?? '');
+  await p9.evaluate(() => window.__ui?.spin?.());
+  await p9.waitForFunction((b) => window.__ui.balance() !== b, before2,
+    { timeout: 30000 }).catch(() => {});
+  check('later bets skip the probe', state.modesSeen.join(',') === '<none>',
+    state.modesSeen.join(','));
+  check('no page errors while probing', errs.length === 0, errs.slice(0, 2).join(' | '));
+  await p9.close();
+  state.rejectAnyMode = false;
+}
 
 // --- 4. insufficient balance is surfaced, not swallowed ----------------------
 // clear any round the earlier scenarios left open, or /wallet/play answers with
