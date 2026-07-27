@@ -39,10 +39,8 @@ export class ReelFrame extends Container {
   constructor(font: GlyphFont | null) {
     super();
     this.addChild(this.base, this.accents);
-    if (font) {
-      this.title = new GlyphText(font, { size: 13, align: 'center', letterSpacing: 3 });
-      this.addChild(this.title);
-    }
+    this.title = new GlyphText(font, { size: 13, align: 'center', letterSpacing: 3 });
+    this.addChild(this.title);
   }
 
   /** Text shown in the cartouche above the grid. */

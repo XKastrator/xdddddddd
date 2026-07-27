@@ -510,15 +510,16 @@ state.roundShape = 'book';
   await p9.evaluate(() => window.__ui?.spin?.());
   await p9.waitForFunction((b) => window.__ui.balance() !== b, before,
     { timeout: 30000 }).catch(() => {});
+  // the probe fires three requests; wait for the last one rather than racing it
+  await p9.waitForFunction(() => window.__ui.idle(), null, { timeout: 60000 }).catch(() => {});
   const after = await p9.evaluate(() => window.__ui?.balance?.() ?? '');
   check('a bet succeeds against an RGS that rejects every mode value',
-    after !== before, `${before} -> ${after}; sent = ${state.modesSeen.join(',')}`);
+    after !== before && after !== '', `${before} -> ${after}; sent = ${state.modesSeen.join(',')}`);
   check('the probe walked the whole ladder and stopped at no-mode',
     state.modesSeen.length === 3 && state.modesSeen[2] === '<none>',
     state.modesSeen.join(','));
 
   // the accepted variant is reused rather than re-probed
-  await p9.waitForFunction(() => window.__ui.idle(), null, { timeout: 60000 }).catch(() => {});
   state.modesSeen.length = 0;
   const before2 = await p9.evaluate(() => window.__ui?.balance?.() ?? '');
   await p9.evaluate(() => window.__ui?.spin?.());

@@ -21,10 +21,8 @@ export class Toast extends Container {
   constructor(font: GlyphFont | null) {
     super();
     this.addChild(this.bg);
-    if (font) {
-      this.caption = new GlyphText(font, { size: 14, align: 'center', letterSpacing: 1.4 });
-      this.addChild(this.caption);
-    }
+    this.caption = new GlyphText(font, { size: 14, align: 'center', letterSpacing: 1.4 });
+    this.addChild(this.caption);
     this.visible = false;
     this.eventMode = 'none';       // never steals a click from the controls
   }

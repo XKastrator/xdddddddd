@@ -9,7 +9,7 @@
  * Digits share a fixed advance (tabular figures) so a counting-up win counter
  * does not jitter.
  */
-import { Container, Rectangle, Sprite, Texture } from 'pixi.js';
+import { Container, Rectangle, Sprite, Text, Texture } from 'pixi.js';
 
 export interface FontMeta {
   image: string;
@@ -47,9 +47,18 @@ export class GlyphText extends Container {
   private pool: Sprite[] = [];
   private _text = '';
   private opts: Required<GlyphTextOpts>;
+  /**
+   * Stand-in used when the display face did not load.
+   *
+   * The authored face is the whole point of this class, but EVERY control in
+   * the bar draws its caption through it — so a single 404 on font.png used to
+   * take the entire control bar with it, leaving a game with no buttons. Losing
+   * the typeface must cost looks, never the ability to play.
+   */
+  private fallback: Text | null = null;
   contentWidth = 0;
 
-  constructor(private font: GlyphFont, opts: GlyphTextOpts) {
+  constructor(private font: GlyphFont | null, opts: GlyphTextOpts) {
     super();
     this.opts = {
       size: opts.size,
@@ -57,6 +66,20 @@ export class GlyphText extends Container {
       letterSpacing: opts.letterSpacing ?? 1,
       align: opts.align ?? 'left',
     };
+    if (!font) {
+      this.fallback = new Text({
+        text: '',
+        style: {
+          fill: this.opts.tint, fontFamily: 'system-ui, sans-serif',
+          fontSize: Math.round(this.opts.size * 1.15), fontWeight: '700',
+          letterSpacing: this.opts.letterSpacing,
+        },
+      });
+      // the glyph face draws from its baseline; Text draws from its top
+      this.fallback.anchor.set(
+        this.opts.align === 'center' ? 0.5 : this.opts.align === 'right' ? 1 : 0, 1);
+      this.addChild(this.fallback);
+    }
   }
 
   get text(): string { return this._text; }
@@ -69,6 +92,7 @@ export class GlyphText extends Container {
 
   setTint(tint: number): void {
     this.opts.tint = tint;
+    if (this.fallback) { this.fallback.style.fill = tint; return; }
     for (const s of this.sprites) s.tint = tint;
   }
 
@@ -80,17 +104,22 @@ export class GlyphText extends Container {
   }
 
   private layout(): void {
+    if (this.fallback) {
+      this.fallback.text = this._text;
+      this.contentWidth = this.fallback.width;
+      return;
+    }
     for (const s of this.sprites) { s.visible = false; this.pool.push(s); this.removeChild(s); }
     this.sprites = [];
 
-    const { meta } = this.font;
-    const scale = this.font.scaleFor(this.opts.size);
+    const { meta } = this.font!;
+    const scale = this.font!.scaleFor(this.opts.size);
     const upper = this._text.toUpperCase();
 
     let x = 0;
     for (const ch of upper) {
       if (ch === ' ') { x += meta.space * scale + this.opts.letterSpacing; continue; }
-      const tex = this.font.textures.get(ch);
+      const tex = this.font!.textures.get(ch);
       const g = meta.glyphs[ch];
       if (!tex || !g) { x += meta.space * scale + this.opts.letterSpacing; continue; }
       const sp = this.acquire();

@@ -58,7 +58,7 @@ export class PixiPresenter implements Presenter {
   private toastView: Toast;
   private lblMode: GlyphText; private lblSpins: GlyphText; private lblVault: GlyphText;
   private lblSpinWin: GlyphText; private lblTotal: GlyphText;
-  /** In-canvas control bar. Null when no display face was loaded. */
+  /** In-canvas control bar. Null only when no UI callbacks were supplied. */
   panel: UiPanel | null = null;
 
   skip = false;
@@ -89,25 +89,21 @@ export class PixiPresenter implements Presenter {
       this.logo.anchor.set(0.5, 0);
     }
 
-    // The HUD uses the authored display face; falling back to the OS font is
-    // exactly the tell we are removing, so a missing atlas hides the HUD text
-    // rather than rendering it in system-ui.
+    // The authored face is preferred, but nothing here REQUIRES it: GlyphText
+    // falls back to a system-font Text, so a missing font.png costs typography
+    // and never the control bar. Losing every button to one 404 is exactly the
+    // failure mode that makes a live game look dead.
     const font = assets.font ?? null;
     const mk = (size: number, tint: number, align: 'left' | 'right' = 'left') =>
-      new GlyphText(font!, { size, tint, align, letterSpacing: 1.5 });
-    if (font) {
-      this.lblMode = mk(14, THEME.amber2);
-      this.lblSpins = mk(13, THEME.txt, 'right');
-      this.lblVault = mk(13, THEME.teal, 'right');
-      this.lblSpinWin = mk(13, THEME.gold, 'right');
-      this.lblTotal = mk(19, THEME.txt);
-      this.hud.addChild(this.lblMode, this.lblSpins, this.lblVault, this.lblSpinWin, this.lblTotal);
-      if (assets.ui) this.panel = new UiPanel(font, assets.ui);
-    } else {
-      const stub = () => ({ text: '', position: { set: () => {} } } as unknown as GlyphText);
-      this.lblMode = stub(); this.lblSpins = stub(); this.lblVault = stub();
-      this.lblSpinWin = stub(); this.lblTotal = stub();
-    }
+      new GlyphText(font, { size, tint, align, letterSpacing: 1.5 });
+    this.lblMode = mk(14, THEME.amber2);
+    this.lblSpins = mk(13, THEME.txt, 'right');
+    this.lblVault = mk(13, THEME.teal, 'right');
+    this.lblSpinWin = mk(13, THEME.gold, 'right');
+    this.lblTotal = mk(19, THEME.txt);
+    this.hud.addChild(this.lblMode, this.lblSpins, this.lblVault, this.lblSpinWin,
+      this.lblTotal);
+    if (assets.ui) this.panel = new UiPanel(font, assets.ui);
 
     // heat haze distorts the scene only; shimmer sweeps the grid; chromatic
     // aberration is an impact accent applied to the whole stage

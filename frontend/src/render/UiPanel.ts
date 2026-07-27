@@ -67,7 +67,7 @@ class Button extends Control {
   private bg = new Graphics();
   private cap: GlyphText;
 
-  constructor(font: GlyphFont, text: string, private w: number, private h: number,
+  constructor(font: GlyphFont | null, text: string, private w: number, private h: number,
               onTap: () => void) {
     super(onTap);
     this.cap = new GlyphText(font, { size: Math.min(15, h * 0.34), align: 'center',
@@ -181,17 +181,15 @@ function drawIcon(g: Graphics, kind: IconName, s: number, color: number): void {
 class SpinButton extends Control {
   private bg = new Graphics();
   private glyph = new Graphics();
-  private countdown: GlyphText | null = null;
+  private countdown: GlyphText;
   private r = 38;
   private mode: 'spin' | 'stop' = 'spin';
 
   constructor(font: GlyphFont | null, onTap: () => void) {
     super(onTap);
     this.addChild(this.bg, this.glyph);
-    if (font) {
-      this.countdown = new GlyphText(font, { size: 13, align: 'center', letterSpacing: 1.5 });
-      this.addChild(this.countdown);
-    }
+    this.countdown = new GlyphText(font, { size: 13, align: 'center', letterSpacing: 1.5 });
+    this.addChild(this.countdown);
     this.redraw();
   }
 
@@ -199,7 +197,7 @@ class SpinButton extends Control {
   /** `remaining` non-null switches the button into autoplay STOP mode. */
   setAuto(remaining: number | null): void {
     this.mode = remaining === null ? 'spin' : 'stop';
-    if (this.countdown) this.countdown.text = remaining === null ? '' : String(remaining);
+    this.countdown.text = remaining === null ? '' : String(remaining);
     this.redraw();
   }
   protected restyle(): void { this.redraw(); }
@@ -243,10 +241,8 @@ class SpinButton extends Control {
       const s = r * 0.44;
       ig.poly([-s * 0.72, -s, s * 0.88, 0, -s * 0.72, s]).fill({ color: c, alpha: 0.75 });
     }
-    if (this.countdown) {
-      this.countdown.setTint(THEME.teal);
-      this.countdown.position.set(0, sink + r * 0.62);
-    }
+    this.countdown.setTint(THEME.teal);
+    this.countdown.position.set(0, sink + r * 0.62);
 
     this.alpha = this.enabled ? 1 : 0.5;
     const hit = Math.max(r + 6, TAP / 2);
@@ -258,7 +254,7 @@ class SpinButton extends Control {
 class Readout extends Container {
   private caption: GlyphText;
   private value: GlyphText;
-  constructor(font: GlyphFont, caption: string, tint: number,
+  constructor(font: GlyphFont | null, caption: string, tint: number,
               private align: 'left' | 'center' | 'right') {
     super();
     this.caption = new GlyphText(font, { size: 9, tint: THEME.dim, letterSpacing: 2.6, align });
@@ -292,7 +288,7 @@ export class UiPanel extends Container {
   private autoRemaining: number | null = null;
   private autoAllowed = true;
 
-  constructor(font: GlyphFont, cb: UiCallbacks) {
+  constructor(font: GlyphFont | null, cb: UiCallbacks) {
     super();
     this.addChild(this.bar);
     this.spin = new SpinButton(font, () => {
