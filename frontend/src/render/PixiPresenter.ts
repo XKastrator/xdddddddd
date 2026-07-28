@@ -373,7 +373,19 @@ export class PixiPresenter implements Presenter {
     if (mode === 'molten_core') this.lblVault.text = 'VAULT 0.00×';
     this.lblSpins.text = `SPINS ${spins}`;
     this.audio?.enterState(mode === 'molten_core' ? 'super' : 'bonus');
-    await this.bg.to(mode === 'molten_core' ? 'super' : 'bonus', this.ctx);
+    const scene = mode === 'molten_core' ? 'super' : 'bonus';
+
+    // A real transition, in order: the old board leaves, the room changes
+    // underneath it, the impact lands, then the banner arrives on an empty
+    // grid. Previously this was a cross-fade plus a banner over a board that
+    // never moved — the round changed and the game did not visibly change with
+    // it, which is why entering a bonus felt like nothing had happened.
+    await this.board.sweepOut(this.ctx);
+    const room = this.bg.to(scene, this.ctx);
+    this.flashChroma(0.55, 720);
+    void shake(this.world, mode === 'molten_core' ? 9 : 6, 520, this.ctx);
+    this.audio?.stinger('win', mode === 'molten_core' ? 'sting_super' : 'sting_bonus');
+    await room;
     await this.banner.show(mode === 'molten_core' ? 'SUPERBONUS' : 'BONUS', 0, this.ctx);
   }
 

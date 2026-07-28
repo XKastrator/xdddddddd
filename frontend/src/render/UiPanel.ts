@@ -111,7 +111,8 @@ class RoundButton extends Control {
   /** `on` would shadow Pixi's EventEmitter.on — hence `active`. */
   private active = false;
 
-  constructor(private kind: IconName, private r: number, onTap: () => void) {
+  constructor(private kind: IconName, private r: number, onTap: () => void,
+              private style: 'ring' | 'bare' = 'bare') {
     super(onTap);
     this.addChild(this.bg, this.icon);
     this.redraw();
@@ -121,21 +122,35 @@ class RoundButton extends Control {
   setRadius(r: number): void { this.r = r; this.redraw(); }
   protected restyle(): void { this.redraw(); }
 
+  /**
+   * Two skins, both quiet.
+   *
+   * The previous button was a filled brown plate with a border — five of those
+   * across a bar reads as a toolbar, not as a game. Reference bars draw their
+   * secondary controls as a bare white glyph, with a thin ring only where one
+   * control needs to stand slightly apart. The colour work belongs to the
+   * board; the bar's job is to be legible and get out of the way.
+   */
   private redraw(): void {
     const r = this.r;
-    const accent = this.active ? THEME.teal : this.hovered && this.enabled ? THEME.amber2 : 0x8a7963;
+    const lit = this.hovered && this.enabled;
+    const tint = this.active ? THEME.teal : 0xffffff;
     this.bg.clear();
-    this.bg.circle(0, 2, r).fill({ color: 0x0d0906 });
-    this.bg.circle(0, this.pressed ? 1 : 0, r)
-      .fill({ color: this.hovered && this.enabled ? 0x2a1e14 : 0x1b140d });
-    this.bg.circle(0, this.pressed ? 1 : 0, r)
-      .stroke({ width: 1.6, color: this.active ? THEME.teal : THEME.line });
-    if (this.active) this.bg.circle(0, 0, r * 1.28).fill({ color: THEME.teal, alpha: 0.10 });
+    if (this.style === 'ring') {
+      this.bg.circle(0, 0, r).fill({ color: 0x000000, alpha: lit ? 0.45 : 0.25 });
+      this.bg.circle(0, 0, r).stroke({ width: 2, color: tint, alpha: lit ? 1 : 0.85 });
+    } else if (lit) {
+      this.bg.circle(0, 0, r).fill({ color: 0xffffff, alpha: 0.10 });
+    }
+    if (this.active && this.style !== 'ring') {
+      this.bg.circle(0, 0, r).stroke({ width: 2, color: THEME.teal, alpha: 0.9 });
+    }
 
     this.icon.clear();
     this.icon.y = this.pressed ? 1 : 0;
-    drawIcon(this.icon, this.kind, r * 0.52, accent);
-    this.alpha = this.enabled ? 1 : 0.45;
+    drawIcon(this.icon, this.kind, r * 0.55, tint);
+    this.icon.alpha = lit ? 1 : 0.9;
+    this.alpha = this.enabled ? 1 : 0.4;
     // the drawn art can be smaller than a finger; the hit area never is
     const hit = Math.max(r, TAP / 2);
     this.hitArea = new Rectangle(-hit, -hit, hit * 2, hit * 2);
@@ -245,43 +260,46 @@ class ChevronStack extends Container {
 class BonusButton extends Control {
   private bg = new Graphics();
   private cap: GlyphText;
-  private w = 92;
-  private h = 44;
+  private r = 30;
 
   constructor(font: GlyphFont | null, text: string, onTap: () => void) {
     super(onTap);
-    this.cap = new GlyphText(font, { size: 13, tint: 0xffffff, align: 'center',
-      letterSpacing: 2 });
+    this.cap = new GlyphText(font, { size: 9, tint: 0xffffff, align: 'center',
+      letterSpacing: 1.4 });
     this.cap.text = text;
     this.addChild(this.bg, this.cap);
     this.redraw();
   }
 
-  setSize(w: number, h: number): void { this.w = w; this.h = h; this.redraw(); }
+  setRadius(r: number): void { this.r = r; this.redraw(); }
   setText(t: string): void { this.cap.text = t; this.redraw(); }
   protected restyle(): void { this.redraw(); }
 
+  /**
+   * The feature buy: a green disc at the far right.
+   *
+   * Green because it is the one control in the bar that spends a different and
+   * much larger amount than SPIN, and it must never be mistaken for it. It
+   * opens the confirmation panel — it does not place a bet — so the rule that a
+   * buy is always confirmed before money moves is unchanged.
+   */
   private redraw(): void {
-    const { w, h } = this;
+    const r = this.r;
     const sink = this.pressed ? 1 : 0;
+    const lit = this.hovered && this.enabled;
     this.bg.clear();
-    this.bg.roundRect(-w / 2, -h / 2 + 3, w, h, h / 2).fill({ color: 0x0a2a12 });
-    this.bg.roundRect(-w / 2, -h / 2 + sink, w, h, h / 2)
-      .fill({ color: this.hovered && this.enabled ? 0x2fbf4f : 0x22a344 });
-    this.bg.roundRect(-w / 2, -h / 2 + sink, w, h * 0.5, h / 2)
-      .fill({ color: 0xffffff, alpha: 0.12 });
-    this.cap.position.set(0, h * 0.14 + sink);
+    this.bg.circle(0, 3, r).fill({ color: 0x07260f });
+    this.bg.circle(0, sink, r).fill({ color: lit ? 0x2fbf4f : 0x1f9c3f });
+    this.bg.circle(0, sink - r * 0.28, r * 0.86)
+      .fill({ color: 0xffffff, alpha: 0.10 });
+    this.bg.circle(0, sink, r).stroke({ width: 2, color: 0x8ef0a6, alpha: lit ? 0.9 : 0.5 });
+    this.cap.position.set(0, r * 0.2 + sink);
     this.alpha = this.enabled ? 1 : 0.45;
-    this.hitArea = new Rectangle(-w / 2, -Math.max(h, TAP) / 2, w, Math.max(h, TAP));
+    const hit = Math.max(r, TAP / 2);
+    this.hitArea = new Rectangle(-hit, -hit, hit * 2, hit * 2);
   }
 }
 
-/**
- * The primary action. Circular, molten, and physically the largest thing in the
- * bar — a player should never have to look for it. Doubles as the autoplay STOP
- * control while a session runs, so stopping is always one tap on the control the
- * thumb is already resting on.
- */
 class SpinButton extends Control {
   private bg = new Graphics();
   private glyph = new Graphics();
@@ -298,7 +316,7 @@ class SpinButton extends Control {
   }
 
   setRadius(r: number): void { this.r = r; this.redraw(); }
-  /** Switch the glyph between PLAY and STOP without touching the countdown. */
+  /** Switch the glyph between SPIN and STOP without touching the countdown. */
   setMode(m: 'spin' | 'stop'): void {
     if (this.mode === m) return;
     this.mode = m;
@@ -312,55 +330,47 @@ class SpinButton extends Control {
   }
   protected restyle(): void { this.redraw(); }
 
+  /**
+   * A heavy white ring around a dark centre.
+   *
+   * The molten orange disc it replaced was the loudest thing on screen and
+   * competed with the board for attention every frame. A ring reads as the
+   * primary action through SIZE and contrast instead of colour, which leaves
+   * colour free to mean something — and lets the one genuinely different
+   * action in the bar, the feature buy, own green by itself.
+   */
   private redraw(): void {
     const r = this.r;
-    const sink = this.pressed ? 2 : 0;
     const lit = this.hovered && this.enabled;
+    const sink = this.pressed ? 1 : 0;
     const g = this.bg;
     g.clear();
+    g.circle(0, sink, r).fill({ color: lit ? 0x22252b : 0x141619 });
+    g.circle(0, sink, r).stroke({ width: Math.max(4, r * 0.13), color: 0xffffff,
+      alpha: this.enabled ? 1 : 0.35 });
 
-    // seated ring the button sits in
-    g.circle(0, 3, r + 6).fill({ color: 0x0a0705 });
-    g.circle(0, 0, r + 5).stroke({ width: 2, color: THEME.line });
-    // heat bloom
-    g.circle(0, 0, r + (lit ? 13 : 9))
-      .fill({ color: THEME.amber, alpha: this.enabled ? (lit ? 0.22 : 0.13) : 0.04 });
-
+    const q = this.glyph;
+    q.clear();
+    q.y = sink;
+    const s = r * 0.5;
     if (this.mode === 'stop') {
-      g.circle(0, sink, r).fill({ color: 0x2b1a10 });
-      g.circle(0, sink, r).stroke({ width: 2.5, color: THEME.teal, alpha: 0.9 });
-      g.circle(0, sink - r * 0.35, r * 0.92).fill({ color: 0xffffff, alpha: 0.05 });
+      q.roundRect(-s * 0.62, -s * 0.62, s * 1.24, s * 1.24, s * 0.2)
+        .fill({ color: 0xffffff });
     } else {
-      // molten body: hot core, lit upper half, bright top sliver
-      g.circle(0, sink, r).fill({ color: 0xc24f00 });
-      g.circle(0, sink - r * 0.16, r * 0.94).fill({ color: 0xff8a2a });
-      g.circle(0, sink - r * 0.34, r * 0.72).fill({ color: 0xffb347, alpha: 0.75 });
-      g.circle(0, sink - r * 0.52, r * 0.42).fill({ color: 0xffe0a8, alpha: 0.55 });
-      g.circle(0, sink, r).stroke({ width: 2.5, color: 0xffd08a, alpha: 0.85 });
+      // a circular arrow: the universal "spin" glyph, not a media play triangle
+      q.arc(0, 0, s * 0.86, Math.PI * 0.72, Math.PI * 2.18)
+        .stroke({ width: s * 0.34, color: 0xffffff, cap: 'round' });
+      q.poly([s * 0.30, -s * 1.06, s * 1.06, -s * 0.66, s * 0.34, -s * 0.24])
+        .fill({ color: 0xffffff });
     }
-
-    // glyph: a triangle "go" mark, or a stop square while autoplay runs
-    const ig = this.glyph;
-    ig.clear();
-    ig.y = sink;
-    const c = this.mode === 'stop' ? THEME.teal : 0x3d1200;
-    if (this.mode === 'stop') {
-      const s = r * 0.34;
-      ig.roundRect(-s, -s - r * 0.18, s * 2, s * 2, s * 0.3).fill({ color: c });
-    } else {
-      const s = r * 0.44;
-      ig.poly([-s * 0.72, -s, s * 0.88, 0, -s * 0.72, s]).fill({ color: c, alpha: 0.75 });
-    }
-    this.countdown.setTint(THEME.teal);
-    this.countdown.position.set(0, sink + r * 0.62);
-
+    this.countdown.position.set(0, r + 16);
+    this.countdown.setTint(0xffffff);
     this.alpha = this.enabled ? 1 : 0.5;
-    const hit = Math.max(r + 6, TAP / 2);
+    const hit = Math.max(r, TAP / 2);
     this.hitArea = new Rectangle(-hit, -hit, hit * 2, hit * 2);
   }
 }
 
-/** A caption + value readout (balance, bet). Captions recede, values lead. */
 class Readout extends Container {
   private caption: GlyphText;
   private value: GlyphText;
@@ -416,7 +426,8 @@ export class UiPanel extends Container {
       else cb.onSpin();
     });
     this.skip = new RoundButton('skip', 21, cb.onSkip);
-    this.turbo = new RoundButton('turbo', 21, () => this.turbo.setOn(cb.onToggleTurbo()));
+    this.turbo = new RoundButton('turbo', 21,
+      () => this.turbo.setOn(cb.onToggleTurbo()), 'ring');
     this.help = new RoundButton('help', 21, cb.onHelp);
     this.auto = new RoundButton('auto', 21, cb.onAutoplay);
     this.betDown = new Button(font, '-', 40, TAP, () => cb.onBetStep(-1));
@@ -428,9 +439,10 @@ export class UiPanel extends Container {
     this.modeCaption = new GlyphText(font, { size: 9, tint: THEME.dim, align: 'center',
       letterSpacing: 2.6 });
     this.modeCaption.text = 'MODE';
-    this.betReadout = new Readout(font, 'BET', THEME.amber2, 'left');
-    this.balReadout = new Readout(font, 'BALANCE', THEME.txt, 'left');
-    this.winReadout = new Readout(font, 'WIN', THEME.gold, 'left');
+    // one weight, one colour: the bar states facts, the board carries the colour
+    this.betReadout = new Readout(font, 'BET', 0xffffff, 'left');
+    this.balReadout = new Readout(font, 'BALANCE', 0xffffff, 'left');
+    this.winReadout = new Readout(font, 'WIN', 0xffffff, 'left');
     this.winReadout.set('0.00');
     this.menu = new RoundButton('menu', 21, cb.onHelp);
     this.stepper = new ChevronStack(13, (d) => cb.onBetStep(d));
@@ -523,10 +535,8 @@ export class UiPanel extends Container {
 
     const pad = Math.max(14, w * 0.02);
     this.bar.clear();
-    this.bar.rect(0, 0, w, barH).fill({ color: 0x0c0906 });
-    this.bar.rect(0, 0, w, barH * 0.42).fill({ color: 0xffffff, alpha: 0.014 });
-    this.bar.rect(0, 0, w, 2).fill({ color: 0x000000 });
-    this.bar.rect(0, 2, w, 1.5).fill({ color: EDGE_HOT, alpha: 0.55 });
+    this.bar.rect(0, 0, w, barH).fill({ color: 0x0b0c0e });
+    this.bar.rect(0, 0, w, 1).fill({ color: 0xffffff, alpha: 0.07 });
 
     if (compact) this.layoutCompact(w, barH, pad);
     else this.layoutWide(w, barH, pad);
@@ -565,19 +575,19 @@ export class UiPanel extends Container {
     this.stepper.position.set(x - 22, mid);
 
     // --- right cluster, laid out from the edge inwards -----------------------
-    const bonusW = 104;
-    this.bonus.setSize(bonusW, 46);
-    this.bonus.position.set(w - pad - bonusW / 2, mid);
-    const spinR = Math.min(34, barH / 2 - 6);
+    const bonusR = Math.min(34, barH / 2 - 4);
+    this.bonus.setRadius(bonusR);
+    this.bonus.position.set(w - pad - bonusR, mid);
+    const spinR = Math.min(34, barH / 2 - 4);
     this.spin.setRadius(spinR);
-    const spinX = w - pad - bonusW - 18 - spinR;
+    const spinX = w - pad - bonusR * 2 - 20 - spinR;
     this.spin.position.set(spinX, mid);
 
     // Help lives behind the hamburger and skip is the primary button while a
     // round runs, so neither needs a circle of its own.
     this.skip.visible = false; this.help.visible = false;
-    this.auto.setRadius(22);
-    this.auto.position.set(spinX - spinR - 22 - 22, mid);
+    this.auto.setRadius(24);
+    this.auto.position.set(spinX - spinR - 22 - 24, mid);
 
     // The mode selector is not in this layout: BONUS is the way into a feature
     // buy now. The arrows stay in the tree — autoplay and the tests still drive
@@ -586,9 +596,9 @@ export class UiPanel extends Container {
     for (const b of [this.modeLeft, this.modeRight, this.betDown, this.betUp]) {
       b.visible = false;
     }
-    // The mode name sits in the empty span between the money group and the
-    // actions. Parking it under the turbo button put it on top of the button.
-    this.modeLabel.position.set((x + 30 + spinX - spinR - 66) / 2, mid + 5);
+    // The round's name is already carved into the frame's cartouche above the
+    // grid; repeating it across the middle of the bar was filler.
+    this.modeLabel.visible = false;
   }
 
   /** Portrait: money on top, actions underneath. Same reading order as wide. */
@@ -605,12 +615,12 @@ export class UiPanel extends Container {
 
     // row 2 — actions, with the two money-spending controls on the right
     const rowY = barH - 46;
-    const bonusW = Math.min(96, w * 0.24);
-    this.bonus.setSize(bonusW, 44);
-    this.bonus.position.set(w - pad - bonusW / 2, rowY);
+    const bonusR = 27;
+    this.bonus.setRadius(bonusR);
+    this.bonus.position.set(w - pad - bonusR, rowY);
     const r = 30;
     this.spin.setRadius(r);
-    const spinX = w - pad - bonusW - 14 - r;
+    const spinX = w - pad - bonusR * 2 - 16 - r;
     this.spin.position.set(spinX, rowY);
 
     this.skip.visible = false; this.help.visible = false;
@@ -625,6 +635,6 @@ export class UiPanel extends Container {
     for (const b of [this.modeLeft, this.modeRight, this.betDown, this.betUp]) {
       b.visible = false;
     }
-    this.modeLabel.position.set(w / 2, readTop + 6);
+    this.modeLabel.visible = false;
   }
 }

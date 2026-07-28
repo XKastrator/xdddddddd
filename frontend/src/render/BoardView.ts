@@ -133,8 +133,11 @@ export class BoardView extends Container {
    */
   async reveal(board: Board, ctx: AnimCtx, holdFrom = -1): Promise<void> {
     this.setBoard(board);
-    if (ctx.reduced) return;
-
+    // Reduced motion — and the frame-rate guard, which routes through the same
+    // flag — SHORTENS this. It must not delete it: a board that appears in one
+    // frame is the exact failure this method exists to fix, and the players on
+    // the weakest devices would have been the only ones still getting it.
+    const brisk = ctx.reduced;
     const travel = this.height2 + this.cell;
     const held = (c: number) => holdFrom >= 0 && c >= holdFrom;
     // Column start times, in units of one column's own fall duration.
@@ -147,7 +150,7 @@ export class BoardView extends Container {
       t += held(c) ? 1.35 : 0.34;
     }
     const span = starts[this.cols - 1] + (held(this.cols - 1) ? 1.35 : 1);
-    const fall = 300;
+    const fall = brisk ? 90 : 300;
     const total = Math.round(fall * span);
 
     const entries: { sp: SymbolSprite; homeY: number; start: number; slow: boolean }[] = [];
@@ -173,9 +176,42 @@ export class BoardView extends Container {
     });
     for (const e of entries) e.sp.y = e.homeY;
     // the bottom row carries the impact; squashing all thirty would be noise
+    if (brisk) return;
     await Promise.all(
       Array.from({ length: this.cols }, (_, c) => this.at(this.rows - 1, c))
         .map((sp) => squash(sp, 0.16, 170, ctx)));
+  }
+
+  /**
+   * Clear the grid by dropping everything out of the bottom.
+   *
+   * Entering a bonus used to be a background cross-fade with a banner over a
+   * board that never moved — the round changed but the game did not visibly
+   * change with it. Sweeping the old board out gives the transition a beginning,
+   * and leaves the grid empty for the next reveal to fill, so the two motions
+   * read as one sequence instead of a banner interrupting a static picture.
+   */
+  async sweepOut(ctx: AnimCtx): Promise<void> {
+    const drop = this.height2 + this.cell;
+    const cells: { sp: SymbolSprite; homeY: number; delay: number }[] = [];
+    for (let r = 0; r < this.rows; r++)
+      for (let c = 0; c < this.cols; c++) {
+        cells.push({ sp: this.at(r, c), homeY: this.homeOf(r, c).y,
+          // bottom row leaves first, so the board empties downward
+          delay: (this.rows - 1 - r) * 0.10 + c * 0.02 });
+      }
+    const span = 1 + Math.max(...cells.map((e) => e.delay));
+    await tween({
+      duration: ctx.reduced ? 140 : 420, ease: (t) => t, shouldSkip: ctx.shouldSkip,
+      onUpdate: (t) => {
+        const now = t * span;
+        for (const e of cells) {
+          const local = Math.max(0, Math.min(1, now - e.delay));
+          e.sp.y = e.homeY + drop * (local * local);
+        }
+      },
+    });
+    for (const e of cells) { e.sp.setSymbol(Sym.EMPTY); e.sp.y = e.homeY; }
   }
 
   /**
