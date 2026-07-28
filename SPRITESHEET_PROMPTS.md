@@ -83,14 +83,26 @@ pętli: rdzeń biały #fff0c8, wokół korona światła, wyraźne iskry), a na k
 
 ### Tabela przedmiotów
 
-| symbol | co narysować |
-|---|---|
-| **Brąz** | prosty krasnoludzki puchar z brązu, przysadzisty, nitowany |
-| **Żelazo** | kuty żelazny młot bojowy, krótki trzonek owinięty skórą |
-| **Srebro** | srebrny naramiennik z rytem, wypolerowany |
-| **Złoto** | złoty pierścień pieczętny z ciężkim oczkiem |
-| **Mithril** | mithrilowy sztylet, ostrze o zimnym błękitnym połysku |
-| **Korona** | ciężka korona z ciemnego metalu z roztopionym rdzeniem |
+**NIE OPISUJ przedmiotu słowami — ZAŁĄCZ OBRAZEK.** Symbole leżą w
+`assets/reference/` (wycięte z atlasu, już na magentowym tle, więc referencja
+wygląda dokładnie tak, jak ma wyglądać wynik).
+
+Pierwsze zapytanie zawsze brzmi: *„to przedmiot z mojej gry — odtwórz go
+dokładnie, bez zmian"*. Jeśli już tam wyjdzie inny przedmiot, nie ma sensu
+robić trzech kolejnych klatek.
+
+| symbol | plik referencyjny | co to jest |
+|---|---|---|
+| **Brąz** | `bronze.png` | sztabka metalu |
+| **Żelazo** | `iron.png` | młot bojowy z drewnianym trzonkiem |
+| **Srebro** | `silver.png` | tarcza ze srebra i złota |
+| **Złoto** | `gold.png` | puchar wysadzany klejnotami |
+| **Mithril** | `mythril.png` | miecz o zielonkawym ostrzu |
+| **Korona** | `crown.png` | korona z roztopionym rdzeniem |
+
+> Pierwsza wersja tego dokumentu opisywała te przedmioty z pamięci i **myliła
+> się** — brąz nazwałem pucharem, a puchar to złoto. Opis słowny jest tu
+> zbędnym ryzykiem, skoro obrazek istnieje.
 
 > Uwaga: **im wyższa ranga, tym mocniejszy kontrast między klatką 1 a 3.**
 > Brąz ledwie się tli, korona ma bić światłem. Napisz to modelowi wprost przy
@@ -137,8 +149,8 @@ Cztery klatki, jak przy relikwiach:
 
 > [PREAMBUŁA STYLU]
 >
-> Przedmiot: **żarzący się węgiel kuźniczy (Cinder)** — nieregularna bryła
-> czarnego węgla z pękniętą, świecącą siatką rozżarzonych szczelin w środku.
+> Załącz `assets/reference/cinder.png`. Przedmiot: **płonąca gwiazda (Cinder)**
+> — czteroramienna iskra ognia, dokładnie jak na załączonym obrazku.
 > Faza: **[1 przygasły / 2 tlący się / 3 buchający ogniem, najjaśniej /
 > 4 opadający]**. Ta sama bryła, ten sam kadr na wszystkich czterech.
 
@@ -164,9 +176,8 @@ Pliki: `burst_1.png … burst_4.png`.
 
 > [PREAMBUŁA STYLU]
 >
-> Przedmiot: **kula płynnego, roztopionego metalu (Flux)** unosząca się w
-> powietrzu — powierzchnia lustrzana i falująca, w środku widoczny jaśniejszy
-> rdzeń. Faza: **[1 spokojna / 2 wzburzona / 3 najjaśniejsza, prawie biała /
+> Załącz `assets/reference/flux.png`. Przedmiot: **kropla płynnego mithrilu
+> (Flux)** — jak na załączonym obrazku, chłodny turkus z jaśniejszym rdzeniem. Faza: **[1 spokojna / 2 wzburzona / 3 najjaśniejsza, prawie biała /
 > 4 uspokajająca się]**.
 
 Pliki: `flux_1.png … flux_4.png`.
