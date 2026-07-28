@@ -150,8 +150,13 @@ export class BoardView extends Container {
       t += held(c) ? 1.35 : 0.34;
     }
     const span = starts[this.cols - 1] + (held(this.cols - 1) ? 1.35 : 1);
-    const fall = brisk ? 90 : 300;
-    const total = Math.round(fall * span);
+    // Brisk mode collapses the reveal into one short move instead of merely
+    // shortening each column. Keeping the stagger and cutting the fall still
+    // cost ~240ms PER SPIN, and a resumed bonus round replays a hundred of
+    // them — the catch-up replay went from instant to over a minute, which is
+    // a hang as far as the player is concerned.
+    const fall = brisk ? 60 / span : 300;
+    const total = Math.max(60, Math.round(fall * span));
 
     const entries: { sp: SymbolSprite; homeY: number; start: number; slow: boolean }[] = [];
     for (let r = 0; r < this.rows; r++) {
@@ -202,7 +207,7 @@ export class BoardView extends Container {
       }
     const span = 1 + Math.max(...cells.map((e) => e.delay));
     await tween({
-      duration: ctx.reduced ? 140 : 420, ease: (t) => t, shouldSkip: ctx.shouldSkip,
+      duration: ctx.reduced ? 60 : 420, ease: (t) => t, shouldSkip: ctx.shouldSkip,
       onUpdate: (t) => {
         const now = t * span;
         for (const e of cells) {

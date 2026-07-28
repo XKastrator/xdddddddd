@@ -49,9 +49,14 @@
      This strip keeps accessibility options in the DOM so assistive technology
      and OS-level settings can still reach them. */
   #controls{
-    display:flex; gap:16px; align-items:center; flex-wrap:wrap;
-    padding:6px max(10px, env(safe-area-inset-left)) max(6px, env(safe-area-inset-bottom));
-    background:#0c0906; border-top:1px solid var(--line);
+    display:flex; gap:18px; align-items:center; flex-wrap:wrap;
+    margin:14px 0 4px;
+  }
+  #controls[hidden]{display:none}
+  /* Announced, never drawn: the same message is a toast on the canvas, and a
+     dark strip under the game just to hold two words was a debug harness. */
+  .sr-only{position:absolute; width:1px; height:1px; margin:-1px; padding:0;
+    overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0}
   }
   select,button{
     background:#1b140d; color:var(--txt); border:1px solid var(--line);
@@ -87,6 +92,23 @@
   .overlay-head h2{margin:0; font-size:17px; letter-spacing:1px; color:var(--amber2)}
   .overlay-close{padding:6px 12px; min-height:36px}
   .overlay-body{padding:16px; overflow-y:auto; line-height:1.55; font-size:14px}
+  /* Feature-buy cards: art, name, one line, price. Two side by side on any
+     width that fits them; stacked below that rather than squeezed. */
+  .buy-cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    gap:10px; margin:0 0 14px}
+  .buy-card{display:grid; gap:4px; justify-items:center; text-align:center;
+    padding:14px 10px 12px; border-radius:12px; cursor:pointer;
+    background:#15110c; border:1px solid #2a2018; color:inherit; font:inherit;
+    transition:border-color .12s, background .12s, transform .08s}
+  .buy-card:hover{background:#1d1710; border-color:#4a3a24}
+  .buy-card:active{transform:translateY(1px)}
+  .buy-card.on{border-color:var(--amber2); background:#221a10;
+    box-shadow:0 0 0 1px var(--amber2) inset}
+  .buy-art{display:block; width:72px; height:54px}
+  .buy-art svg{width:100%; height:100%; display:block}
+  .buy-name{font-weight:700; letter-spacing:.4px; color:var(--amber2)}
+  .buy-line{font-size:12px; opacity:.75; line-height:1.35}
+  .buy-cost{margin-top:2px; font-variant-numeric:tabular-nums; font-weight:700}
   .overlay-body h3{margin:20px 0 6px; font-size:14px; color:var(--amber2); letter-spacing:.5px}
   .overlay-body h3:first-child{margin-top:0}
   .overlay-body p{margin:0 0 10px}
@@ -144,11 +166,14 @@
 </head>
 <body>
   <div id="stage"></div>
-  <div id="controls">
+  <!-- Settings live behind the menu button now. They stay real DOM controls so
+       they keep their keyboard and screen-reader behaviour; app.ts moves this
+       block into the help overlay on open. -->
+  <div id="controls" hidden>
     <label class="tg"><input type="checkbox" id="reduced"> <span id="lblReduced">Reduced motion</span></label>
     <label class="tg"><input type="checkbox" id="mute"> Mute</label>
-    <div id="err" role="status" aria-live="polite"></div>
   </div>
+  <div id="err" role="status" aria-live="polite" class="sr-only"></div>
   <script type="module" src="/src/app.ts"></script>
 </body>
 </html>

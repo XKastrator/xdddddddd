@@ -294,8 +294,12 @@ async function main(): Promise<void> {
 
     // Buy modes require explicit confirmation BEFORE the bet is placed.
     if (modeInfo(mode).isBuy) {
-      const ok = await buyPanel.confirm(mode, bet, currency);
-      if (!ok) { mode = 'base'; setCost(); return; }
+      // The panel offers BOTH features, so what comes back is which one was
+      // bought — not a yes/no about the one the bar happened to hold.
+      const chosen = await buyPanel.confirm(mode, bet, currency);
+      if (!chosen) { mode = 'base'; setCost(); return; }
+      mode = chosen;
+      setCost();
       try {
         await playRound();
       } finally {
@@ -349,7 +353,20 @@ async function main(): Promise<void> {
 
   spinFn = () => void spin();
   skipFn = doSkip;
-  helpFn = () => { help.render(); help.open(); };
+  /**
+   * The menu: paytable plus the two settings that used to sit in a strip under
+   * the game. `render()` rebuilds the overlay body, so the block is re-attached
+   * each time rather than once at boot.
+   */
+  helpFn = () => {
+    help.render();
+    const settings = document.getElementById('controls');
+    if (settings) {
+      settings.hidden = false;
+      help.body.appendChild(settings);
+    }
+    help.open();
+  };
   autoplayFn = () => void startAutoplay();
   stopAutoFn = () => { autoSession?.cancel(); };
   /**

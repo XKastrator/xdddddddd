@@ -45,6 +45,9 @@ const en: Dict = {
   'sym.gold': 'Gold', 'sym.mythril': 'Mythril', 'sym.crown': 'Molten Crown',
   'sym.flux': 'Flux (Wild)', 'sym.cinder': 'Cinder (Scatter)',
 
+  'buy.short.bonus': '10 free spins · Heat never resets',
+  'buy.short.super': 'Pre-seeded board · one big Pour',
+  'buy.pick': 'Choose a feature',
   'buy.title': 'Confirm purchase', 'buy.cost': 'Cost', 'buy.rtp': 'RTP', 'buy.maxwin': 'Max win',
   'buy.random': 'Every round is random and independent of previous results.',
 
@@ -103,6 +106,9 @@ const pl: Dict = {
   'sym.gold': 'Złoto', 'sym.mythril': 'Mithril', 'sym.crown': 'Roztopiona Korona',
   'sym.flux': 'Topnik (Wild)', 'sym.cinder': 'Żagiew (Scatter)',
 
+  'buy.short.bonus': '10 darmowych spinów · Żar się nie resetuje',
+  'buy.short.super': 'Wyższy start planszy · jeden duży Wylew',
+  'buy.pick': 'Wybierz funkcję',
   'buy.title': 'Potwierdź zakup', 'buy.cost': 'Koszt', 'buy.rtp': 'RTP', 'buy.maxwin': 'Maks. wygrana',
   'buy.random': 'Każda runda jest losowa i niezależna od poprzednich wyników.',
 
@@ -161,6 +167,9 @@ const de: Dict = {
   'sym.gold': 'Gold', 'sym.mythril': 'Mithril', 'sym.crown': 'Geschmolzene Krone',
   'sym.flux': 'Flussmittel (Wild)', 'sym.cinder': 'Glut (Scatter)',
 
+  'buy.short.bonus': '10 Freispiele · Hitze bleibt erhalten',
+  'buy.short.super': 'Vorbelegtes Feld · ein großer Guss',
+  'buy.pick': 'Feature wählen',
   'buy.title': 'Kauf bestätigen', 'buy.cost': 'Kosten', 'buy.rtp': 'RTP', 'buy.maxwin': 'Maximalgewinn',
   'buy.random': 'Jede Runde ist zufällig und unabhängig von vorherigen Ergebnissen.',
 

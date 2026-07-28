@@ -377,12 +377,12 @@ class Readout extends Container {
   constructor(font: GlyphFont | null, caption: string, tint: number,
               private align: 'left' | 'center' | 'right') {
     super();
-    this.caption = new GlyphText(font, { size: 9, tint: THEME.dim, letterSpacing: 2.6, align });
-    this.value = new GlyphText(font, { size: 18, tint, letterSpacing: 1.2, align });
+    this.caption = new GlyphText(font, { size: 8, tint: THEME.dim, letterSpacing: 2.2, align });
+    this.value = new GlyphText(font, { size: 13, tint, letterSpacing: 1, align });
     this.caption.text = caption;
     this.value.text = '—';
     this.caption.position.set(0, 0);
-    this.value.position.set(0, 26);
+    this.value.position.set(0, 20);
     this.addChild(this.caption, this.value);
   }
   setCaption(t: string): void { this.caption.text = t; }
@@ -534,9 +534,19 @@ export class UiPanel extends Container {
     this.position.set(0, h - barH);
 
     const pad = Math.max(14, w * 0.02);
+    // Translucent, so the room the game is set in runs behind the controls
+    // instead of being cut off by a solid plate. Stacked bands fake a vertical
+    // gradient — the bar has to stay readable over a bright background, and a
+    // single flat alpha is either too light at the top or too heavy at the
+    // bottom. Pixi has no gradient fill for Graphics without a texture.
     this.bar.clear();
-    this.bar.rect(0, 0, w, barH).fill({ color: 0x0b0c0e });
-    this.bar.rect(0, 0, w, 1).fill({ color: 0xffffff, alpha: 0.07 });
+    const bands = 8;
+    for (let i = 0; i < bands; i++) {
+      const t0 = i / bands;
+      this.bar.rect(0, barH * t0, w, barH / bands + 1)
+        .fill({ color: 0x05070b, alpha: 0.30 + 0.48 * t0 });
+    }
+    this.bar.rect(0, 0, w, 1).fill({ color: 0xffffff, alpha: 0.10 });
 
     if (compact) this.layoutCompact(w, barH, pad);
     else this.layoutWide(w, barH, pad);
@@ -565,10 +575,10 @@ export class UiPanel extends Container {
 
     // --- money readouts, as one group ---------------------------------------
     x += 44;
-    const readTop = mid - 22;
+    const readTop = mid - 15;
     for (const ro of [this.balReadout, this.winReadout, this.betReadout]) {
       ro.position.set(x, readTop);
-      x += Math.max(96, ro.width2 + 46);
+      x += Math.max(82, ro.width2 + 38);
     }
     // the stepper belongs to BET, so it sits immediately after it
     this.stepper.setSize(13);
