@@ -29,6 +29,8 @@ export class BoardView extends Container {
    */
   private symbolLayer = new Container();
   private clip = new Graphics();
+  /** Drawn ABOVE the symbols: the chain that shows which cells combined. */
+  private links = new Graphics();
 
   constructor(cols: number, rows: number, cell: number, gap: number,
               getTexture?: TextureProvider) {
@@ -70,6 +72,7 @@ export class BoardView extends Container {
         this.symbolLayer.addChild(sp);
       }
     }
+    this.addChild(this.links);
   }
 
   /** Home position of a cell in board-local coordinates. */
@@ -243,47 +246,116 @@ export class BoardView extends Container {
   }
 
   async forge(fusions: Fusion[], ctx: AnimCtx): Promise<void> {
-    // 1) the winning group flares and is drawn INTO the anchor before fusing,
-    //    so the player sees cause (these cells) and effect (this relic)
-    const consumed: SymbolSprite[] = [];
-    for (const f of fusions) {
-      for (const [r, c] of f.cells) consumed.push(this.at(r, c));
-      for (const [r, c] of f.wildCells) consumed.push(this.at(r, c));
-    }
-    const home = consumed.map((sp) => ({ x: sp.x, y: sp.y }));
-    const targets = fusions.flatMap((f) => {
-      const a = this.at(f.anchor[0], f.anchor[1]);
+    // ---- 1. IGNITE ALONG THE CHAIN ---------------------------------------
+    // The old version flared every cell at once and slid them all inward, so a
+    // fusion read as "some things moved" — you could not see WHICH cells
+    // combined, which is the one thing the animation exists to say. Now a light
+    // runs the chain, cell to cell, in order of distance from the anchor, and
+    // each cell ignites as it is reached. Cause, then effect.
+    const chains = fusions.map((f) => {
+      const a = this.cellCenter(f.anchor[0], f.anchor[1]);
       const all = [...f.cells, ...f.wildCells];
-      return all.map(() => ({ x: a.x, y: a.y }));
+      const nodes = all
+        .map(([r, c]) => ({ r, c, sp: this.at(r, c), p: this.cellCenter(r, c) }))
+        .sort((x, y) => (Math.hypot(y.p.x - a.x, y.p.y - a.y))
+                      - (Math.hypot(x.p.x - a.x, x.p.y - a.y)));
+      return { anchor: a, nodes, value: f.value };
     });
+    const all = chains.flatMap((c) => c.nodes);
+    const home = all.map((n) => ({ x: n.sp.x, y: n.sp.y }));
+
+    if (!ctx.reduced) {
+      await tween({
+        duration: 420, shouldSkip: ctx.shouldSkip,
+        onUpdate: (t) => {
+          const g = this.links;
+          g.clear();
+          for (const ch of chains) {
+            const n = ch.nodes.length;
+            // how far the spark has travelled along this chain, in nodes
+            const head = t * n;
+            const pts = [...ch.nodes.map((x) => x.p), ch.anchor];
+            // the trail behind the spark, drawn as a warm cord
+            for (let i = 0; i < pts.length - 1; i++) {
+              const seg = Math.max(0, Math.min(1, head - i));
+              if (seg <= 0) break;
+              const a = pts[i], b = pts[i + 1];
+              g.moveTo(a.x, a.y)
+                .lineTo(a.x + (b.x - a.x) * seg, a.y + (b.y - a.y) * seg)
+                .stroke({ width: 3 + 3 * seg, color: 0xffc46a,
+                  alpha: 0.85, cap: 'round' });
+            }
+            // each cell lights the instant the spark reaches it
+            for (let i = 0; i < ch.nodes.length; i++) {
+              const lit = Math.max(0, Math.min(1, head - i));
+              if (lit <= 0) continue;
+              const p = pts[i];
+              g.circle(p.x, p.y, this.cell * (0.30 + 0.22 * lit))
+                .fill({ color: 0xffe0a0, alpha: 0.34 * (1 - lit) + 0.10 });
+              ch.nodes[i].sp.scale.set(1 + 0.22 * Math.sin(lit * Math.PI));
+            }
+          }
+        },
+      });
+    }
+
+    // ---- 2. DRAW THE CHAIN INTO THE ANCHOR --------------------------------
     await tween({
-      duration: 360, ease: easeOutCubic, shouldSkip: ctx.shouldSkip, reducedMotion: ctx.reduced,
+      duration: ctx.reduced ? 90 : 300, ease: easeOutCubic,
+      shouldSkip: ctx.shouldSkip,
       onUpdate: (t) => {
-        const flare = 1 + 0.26 * Math.sin(t * Math.PI);
-        const pull = t * t;                       // accelerate inward
-        for (let i = 0; i < consumed.length; i++) {
-          const sp = consumed[i];
-          sp.scale.set(flare * (1 - 0.35 * pull));
-          const tgt = targets[i] ?? home[i];
-          sp.x = home[i].x + (tgt.x - home[i].x) * pull * 0.55;
-          sp.y = home[i].y + (tgt.y - home[i].y) * pull * 0.55;
-          sp.alpha = 1 - 0.45 * pull;
+        const pull = t * t;
+        let i = 0;
+        for (const ch of chains) {
+          for (const n of ch.nodes) {
+            const h = home[i];
+            n.sp.x = h.x + (ch.anchor.x - this.cell / 2 - h.x) * pull;
+            n.sp.y = h.y + (ch.anchor.y - this.cell / 2 - h.y) * pull;
+            n.sp.scale.set(1 - 0.55 * pull);
+            n.sp.alpha = 1 - 0.7 * pull;
+            i++;
+          }
         }
+        // the cord tightens as the cells are swallowed
+        this.links.alpha = 1 - t;
       },
     });
-    for (let i = 0; i < consumed.length; i++) {
-      consumed[i].x = home[i].x; consumed[i].y = home[i].y; consumed[i].alpha = 1;
+    this.links.clear();
+    this.links.alpha = 1;
+    for (let i = 0; i < all.length; i++) {
+      all[i].sp.x = home[i].x; all[i].sp.y = home[i].y;
+      all[i].sp.alpha = 1; all[i].sp.scale.set(1);
     }
-    // 2) clear consumed, place product at anchor with a pop
+
+    // ---- 3. THE PRODUCT ARRIVES -------------------------------------------
     const anchors: SymbolSprite[] = [];
     for (const f of fusions) {
-      for (const [r, c] of f.cells) { const sp = this.at(r, c); sp.setSymbol(Sym.EMPTY); sp.scale.set(1); }
-      for (const [r, c] of f.wildCells) { const sp = this.at(r, c); sp.setSymbol(Sym.EMPTY); sp.scale.set(1); }
+      for (const [r, c] of [...f.cells, ...f.wildCells]) {
+        const sp = this.at(r, c); sp.setSymbol(Sym.EMPTY); sp.scale.set(1);
+      }
       const [ar, ac] = f.anchor; const sp = this.at(ar, ac);
       sp.setSymbol(f.to); sp.scale.set(0.2); anchors.push(sp);
     }
+    // a shockwave sized by how much metal went in — a four-cell fusion and a
+    // nine-cell one must not land identically
+    if (!ctx.reduced) {
+      const rings = chains.map((c) => ({ p: c.anchor, n: c.nodes.length }));
+      void tween({
+        duration: 460, shouldSkip: ctx.shouldSkip,
+        onUpdate: (t) => {
+          const g = this.links;
+          g.clear();
+          for (const r of rings) {
+            const rad = this.cell * (0.35 + (0.5 + r.n * 0.09) * t);
+            g.circle(r.p.x, r.p.y, rad)
+              .stroke({ width: 6 * (1 - t), color: 0xffd98a, alpha: 0.9 * (1 - t) });
+          }
+        },
+      }).then(() => this.links.clear());
+    }
     await tween({
-      duration: 320, ease: easeOutBack, shouldSkip: ctx.shouldSkip, reducedMotion: ctx.reduced,
+      duration: ctx.reduced ? 80 : 320, ease: easeOutBack,
+      shouldSkip: ctx.shouldSkip,
       onUpdate: (t) => { for (const sp of anchors) sp.scale.set(0.2 + 0.8 * t); },
     });
     await Promise.all(anchors.map((sp) => squash(sp, 0.18, 200, ctx)));
