@@ -41,10 +41,15 @@ import type { SceneArt, SceneTextures } from '../render/Background';
 export type SceneName = 'base' | 'bonus' | 'super';
 const SCENES: SceneName[] = ['base', 'bonus', 'super'];
 
+/** Symbols that ship a win-loop strip, and the file stem to load it from. */
+const WIN_SHEETS: [Sym, string][] = [[Sym.BRONZE, 'bronze']];
+
 export class AssetLoader {
   private textures = new Map<Sym, Texture>();
   private audio = new Map<string, ArrayBuffer>();
   private scenes: SceneTextures = {};
+  /** Win-loop frames per symbol, sliced from a horizontal strip. */
+  private winFrames = new Map<Sym, Texture[]>();
   private glyphFont: GlyphFont | null = null;
   private logoTex: Texture | null = null;
   private characterTex: Texture | null = null;
@@ -99,6 +104,21 @@ export class AssetLoader {
     }
     tick();
 
+    // Win loops. Optional, one sheet per symbol: a symbol without one keeps the
+    // procedural pulse it has always had, so a missing or half-finished art
+    // pass costs that symbol its animation and nothing else.
+    for (const [sym, name] of WIN_SHEETS) {
+      try {
+        const strip: Texture = await Assets.load(`${base}sym_${name}_win.png`);
+        const n = Math.max(1, Math.round(strip.width / strip.height));
+        const cell = strip.width / n;
+        this.winFrames.set(sym, Array.from({ length: n }, (_, i) => new Texture({
+          source: strip.source,
+          frame: new Rectangle(i * cell, 0, cell, strip.height),
+        })));
+      } catch { /* no sheet for this symbol yet — not a warning, just absent */ }
+    }
+
     // display typeface — the HUD falls back to Pixi Text if this is missing
     try {
       const fm: FontMeta = await fetch(`${base}font.json`).then((r) => r.json());
@@ -147,6 +167,8 @@ export class AssetLoader {
   }
 
   texture(sym: Sym): Texture | undefined { return this.textures.get(sym); }
+  /** Win-loop frames, or undefined when this symbol has no sheet. */
+  winLoop(sym: Sym): Texture[] | undefined { return this.winFrames.get(sym); }
   audioBuffer(id: string): ArrayBuffer | undefined { return this.audio.get(id); }
   sceneTextures(): SceneTextures { return this.scenes; }
   font(): GlyphFont | null { return this.glyphFont; }

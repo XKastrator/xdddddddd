@@ -22,13 +22,14 @@ import { ReelFrame, BAND } from './ReelFrame';
 import { Smith } from './Smith';
 import { Toast } from './Toast';
 import type { AudioManager } from '../audio/AudioManager';
-import type { TextureProvider } from './SymbolSprite';
+import type { TextureProvider, WinLoopProvider } from './SymbolSprite';
 import { GlyphFont, GlyphText } from './GlyphText';
 import { UiPanel, type UiCallbacks } from './UiPanel';
 import type { Texture } from 'pixi.js';
 
 export interface PresenterAssets {
   getTexture?: TextureProvider;
+  getWinLoop?: WinLoopProvider;
   scenes?: SceneTextures;
   character?: Texture | null;
   font?: GlyphFont | null;
@@ -80,7 +81,8 @@ export class PixiPresenter implements Presenter {
   constructor(private app: Application, private audio?: AudioManager,
               assets: PresenterAssets = {}) {
     this.bg = new Background(assets.scenes ?? {});
-    this.board = new BoardView(COLS, ROWS, BASE_CELL, BASE_GAP, assets.getTexture);
+    this.board = new BoardView(COLS, ROWS, BASE_CELL, BASE_GAP,
+      assets.getTexture, assets.getWinLoop);
     if (assets.character) {
       this.smith = new Smith(assets.character);
       this.smithHolder.addChild(this.smith);
@@ -149,7 +151,7 @@ export class PixiPresenter implements Presenter {
       }
       this.smith?.update(dt);
       this.toastView.update();
-      this.board.tickIdle(elapsed, this.reduced);
+      this.board.tickIdle(elapsed, this.reduced, dt);
       this.syncFilters();
     });
   }

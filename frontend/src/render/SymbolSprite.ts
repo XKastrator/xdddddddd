@@ -10,6 +10,8 @@ import { Sym } from '../types/events';
 import { symStyle } from './palette';
 
 export type TextureProvider = (sym: Sym) => Texture | undefined;
+/** Win-loop frames for a symbol, when the art pass has produced them. */
+export type WinLoopProvider = (sym: Sym) => Texture[] | undefined;
 
 /** How much of the cell the authored artwork occupies (glow needs headroom). */
 const ART_FILL = 1.04;
@@ -22,7 +24,12 @@ export class SymbolSprite extends Container {
   private size: number;
   sym: Sym = Sym.EMPTY;
 
-  constructor(size: number, private getTexture?: TextureProvider) {
+  /** Frames of the win loop while one is playing; null the rest of the time. */
+  private loop: Texture[] | null = null;
+  private loopT = 0;
+
+  constructor(size: number, private getTexture?: TextureProvider,
+              private getWinLoop?: WinLoopProvider) {
     super();
     this.size = size;
     this.art.anchor.set(0.5);
@@ -58,7 +65,34 @@ export class SymbolSprite extends Container {
     this.glow.alpha = glowAlpha;
   }
 
+  /**
+   * Start or stop the win loop.
+   *
+   * A winning symbol that only pulses its scale is the loudest remaining tell
+   * that this is not a finished game, so where authored frames exist they are
+   * played instead. Where they do not, this is a no-op and the caller's pulse
+   * still runs — the art pass can land one symbol at a time.
+   */
+  setWinning(on: boolean): void {
+    this.loop = on ? this.getWinLoop?.(this.sym) ?? null : null;
+    this.loopT = 0;
+    if (!on) {
+      const tex = this.sym === Sym.EMPTY ? undefined : this.getTexture?.(this.sym);
+      if (tex) this.art.texture = tex;
+    }
+  }
+
+  /** Advance the win loop. Driven by the board's ticker; no-op when idle. */
+  tickWin(dt: number): boolean {
+    if (!this.loop) return false;
+    this.loopT += dt;
+    const fps = 18;
+    this.art.texture = this.loop[Math.floor(this.loopT * fps) % this.loop.length];
+    return true;
+  }
+
   setSymbol(sym: Sym): void {
+    this.loop = null;
     this.sym = sym;
     const tex = sym === Sym.EMPTY ? undefined : this.getTexture?.(sym);
     if (tex) { this.drawFromAtlas(tex); return; }

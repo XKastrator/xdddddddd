@@ -6,7 +6,7 @@
 import { Container, Graphics } from 'pixi.js';
 import type { Board, Fusion, Spawned } from '../types/events';
 import { Sym } from '../types/events';
-import { SymbolSprite, type TextureProvider } from './SymbolSprite';
+import { SymbolSprite, type TextureProvider, type WinLoopProvider } from './SymbolSprite';
 import { tween, easeOutBack, easeOutCubic } from './tween';
 import { squash, pulse } from './juice';
 import { THEME } from './palette';
@@ -33,7 +33,7 @@ export class BoardView extends Container {
   private links = new Graphics();
 
   constructor(cols: number, rows: number, cell: number, gap: number,
-              getTexture?: TextureProvider) {
+              getTexture?: TextureProvider, getWinLoop?: WinLoopProvider) {
     super();
     this.cols = cols; this.rows = rows; this.cell = cell; this.gap = gap;
     const w = cols * cell + (cols + 1) * gap;
@@ -66,7 +66,7 @@ export class BoardView extends Container {
     this.addChild(this.clip, this.symbolLayer);
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        const sp = new SymbolSprite(cell, getTexture);
+        const sp = new SymbolSprite(cell, getTexture, getWinLoop);
         sp.position.set(gap + c * (cell + gap), gap + r * (cell + gap));
         this.cells.push(sp);
         this.symbolLayer.addChild(sp);
@@ -98,7 +98,8 @@ export class BoardView extends Container {
    * stays inert because it is fuel and must read as dead weight. Each cell gets
    * a phase offset from its index so the grid never pulses in lockstep.
    */
-  tickIdle(elapsed: number, reduced: boolean): void {
+  tickIdle(elapsed: number, reduced: boolean, dt = 0): void {
+    for (const sp of this.cells) sp.tickWin(dt);
     if (reduced) return;
     for (let i = 0; i < this.cells.length; i++) {
       const sp = this.cells[i];
@@ -364,7 +365,12 @@ export class BoardView extends Container {
   /** Celebrate the relics that paid, so a win is legible on the board itself. */
   async celebrate(cells: { r: number; c: number }[], ctx: AnimCtx): Promise<void> {
     if (!cells.length) return;
-    await Promise.all(cells.map(({ r, c }) => pulse(this.at(r, c), 2, 420, ctx)));
+    const sprites = cells.map(({ r, c }) => this.at(r, c));
+    for (const sp of sprites) sp.setWinning(true);
+    // The pulse still runs: it is what a symbol WITHOUT authored frames gets,
+    // and under one it reads as the loop being emphasised rather than replaced.
+    await Promise.all(sprites.map((sp) => pulse(sp, 2, 420, ctx)));
+    for (const sp of sprites) sp.setWinning(false);
   }
 
   async gravity(board: Board, spawned: Spawned[], ctx: AnimCtx): Promise<void> {

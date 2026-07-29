@@ -74,6 +74,7 @@ async function main(): Promise<void> {
 
   const presenter = new PixiPresenter(app, audio, {
     getTexture: (sym) => assets.texture(sym),
+    getWinLoop: (sym) => assets.winLoop(sym),
     scenes: assets.sceneTextures(),
     character: assets.character(),
     font: assets.font(),
