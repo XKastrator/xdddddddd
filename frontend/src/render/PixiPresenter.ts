@@ -21,6 +21,7 @@ import { Background, type SceneTextures } from './Background';
 import { ReelFrame, BAND } from './ReelFrame';
 import { Smith } from './Smith';
 import { Toast } from './Toast';
+import { Camera } from './Camera';
 import type { AudioManager } from '../audio/AudioManager';
 import type { TextureProvider, WinLoopProvider } from './SymbolSprite';
 import { GlyphFont, GlyphText } from './GlyphText';
@@ -77,6 +78,12 @@ export class PixiPresenter implements Presenter {
   private kind: SpinKind = 'base';
   /** Which filters are currently ATTACHED — see `syncFilters`. */
   private attached = { haze: false, shimmer: false, chroma: false };
+  /**
+   * The shot. Previously the scene never moved: a dead spin and a max win were
+   * framed identically, which is the difference between watching a game and
+   * watching a screen. Costs no artwork.
+   */
+  private cam: Camera;
 
   constructor(private app: Application, private audio?: AudioManager,
               assets: PresenterAssets = {}) {
@@ -96,6 +103,7 @@ export class PixiPresenter implements Presenter {
     this.heatMeter.position.set(0, this.board.height2 + BASE_GAP * BAND + 14);
     // The housing lives in the same scaled container as the grid and is drawn
     // in board-local coordinates, so it tracks every layout for free.
+    this.cam = new Camera(this.world);
     this.frame = new ReelFrame(assets.font ?? null);
     this.world.addChild(this.frame, this.heatMeter, this.board, this.fx);
     if (assets.logo) {
@@ -151,6 +159,7 @@ export class PixiPresenter implements Presenter {
       }
       this.smith?.update(dt);
       this.toastView.update();
+      this.cam.update(dt, this.reduced);
       this.board.tickIdle(elapsed, this.reduced, dt);
       this.syncFilters();
     });
@@ -241,8 +250,9 @@ export class PixiPresenter implements Presenter {
     // the layout has to buy that space back out of the available area
     const lay = computeLayout(w, playH, COLS, ROWS, BAND + 1.5);
     const scale = lay.cell / BASE_CELL;
-    this.world.scale.set(scale);
-    this.world.position.set(lay.boardX, lay.boardY);
+    // Layout decides the framing; the camera adds to it every frame.
+    this.cam.setBase(scale, lay.boardX, lay.boardY,
+      this.board.width2, this.board.height2);
 
     // the glyph face draws upward from its baseline, so the top row needs a
     // full line of clearance or the caps are cut off by the stage edge
@@ -339,6 +349,7 @@ export class PixiPresenter implements Presenter {
     const big = biggest >= 7;
     this.audio?.stinger('forge', big ? 'sfx_forge_big' : 'sfx_forge');
     this.smith?.play('strike');
+    this.cam.kick(Math.min(9, 2 + biggest * 0.7));
     await this.board.forge(fusions, this.ctx);
     // the hammer landing: impact scales with the size of the group that fused
     void shake(this.world, big ? 9 : 4.5, big ? 300 : 190, this.ctx);
@@ -382,12 +393,15 @@ export class PixiPresenter implements Presenter {
     // grid. Previously this was a cross-fade plus a banner over a board that
     // never moved — the round changed and the game did not visibly change with
     // it, which is why entering a bonus felt like nothing had happened.
+    this.cam.to(0.94);            // pull back — the round is changing shape
     await this.board.sweepOut(this.ctx);
     const room = this.bg.to(scene, this.ctx);
     this.flashChroma(0.55, 720);
     void shake(this.world, mode === 'molten_core' ? 9 : 6, 520, this.ctx);
     this.audio?.stinger('win', mode === 'molten_core' ? 'sting_super' : 'sting_bonus');
     await room;
+    this.cam.kick(mode === 'molten_core' ? 14 : 10);
+    this.cam.to(1);
     await this.banner.show(mode === 'molten_core' ? 'SUPERBONUS' : 'BONUS', 0, this.ctx);
   }
 
@@ -439,7 +453,10 @@ export class PixiPresenter implements Presenter {
         this.fx.burst(p.x, p.y, 4, 3.4, THEME.gold);
       }
     }
+    this.cam.to(1.14);
+    this.cam.kick(18);
     await this.banner.show('★ MAX WIN ★', 15000, this.ctx);
+    this.cam.reset();
   }
 
   async finalWin(amount: number): Promise<void> {
@@ -450,7 +467,11 @@ export class PixiPresenter implements Presenter {
       this.coins.erupt(this.app.renderer.width, this.app.renderer.height,
                        amount >= 300 ? 44 : 24);
       void shake(this.world, amount >= 300 ? 10 : 6, 380, this.ctx);
+      // push in for the count-up and release after it: the shot itself says
+      // this one is bigger, which no amount of banner styling can
+      this.cam.to(amount >= 500 ? 1.10 : amount >= 100 ? 1.06 : 1.03);
       await this.banner.show(tierName(amount), amount, this.ctx);
+      this.cam.reset();
     }
   }
 
