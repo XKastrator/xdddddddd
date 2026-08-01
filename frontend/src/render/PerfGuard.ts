@@ -59,6 +59,8 @@ export const MAX_TIER = 3;
 export class PerfGuard {
   /** 0 = full quality. Exposed for diagnostics and tests. */
   tier = 0;
+  /** Set by `pin`: the guard stops adjusting and holds whatever tier it has. */
+  private pinned = false;
   private times: number[] = [];
   private last = 0;
   private opened = 0;
@@ -106,7 +108,7 @@ export class PerfGuard {
     const sorted = [...this.times].sort((a, b) => a - b);
     const median = sorted[sorted.length >> 1];
     this.times.length = 0;
-    if (median <= SLOW_MS || this.tier >= MAX_TIER) return;
+    if (this.pinned || median <= SLOW_MS || this.tier >= MAX_TIER) return;
     // How far past the budget the device is decides how far to step. Walking
     // down one rung at a time is right for a device that is merely short of
     // 60 fps; a device at 1 fps needs every lever pulled at once, and making it
@@ -117,6 +119,33 @@ export class PerfGuard {
   /** Jump straight to a tier. Used by the guard itself, by QA and by tests. */
   force(tier: number): void {
     this.applyTo(Math.max(this.tier, Math.min(MAX_TIER, Math.round(tier))));
+  }
+
+  /**
+   * Hold a tier and stop measuring — QA and capture only.
+   *
+   * `force` is deliberately one-way UP, because a guard that can be talked back
+   * down is not a guard. But that also means there is no way to LOOK at the
+   * game at full quality on a machine that cannot render it in real time: a
+   * capture harness stalls frames, the guard reads the stall as a weak device
+   * and drops to half resolution with motion off, and every recording made that
+   * way shows a degraded game. Pinning exists so a recording measures the game
+   * rather than the harness.
+   *
+   * It changes how the game LOOKS and never what it pays.
+   */
+  pin(tier: number): number {
+    this.pinned = true;
+    const want = Math.max(0, Math.min(MAX_TIER, Math.round(tier)));
+    // applyTo only climbs, so a downward pin is written out here
+    this.tier = want;
+    this.target.lowPower = want >= 1;
+    const scale = want >= 3 ? 0.5 : want >= 2 ? 0.75 : 1;
+    const next = Math.max(0.5, this.baseResolution * scale);
+    if (next !== this.app.renderer.resolution) this.app.renderer.resolution = next;
+    this.times.length = 0;
+    this.onChange?.(want);
+    return this.tier;
   }
 
   private applyTo(tier: number): void {

@@ -116,6 +116,8 @@ export class Background extends Container {
   private grade = new Container();
   private vignette: Sprite;
   private floorGlow: Sprite;
+  /** A warm pool behind the cabinet, so it stands off the wall. */
+  private keyLight: Sprite;
   private current: SceneName = 'base';
   private any = false;
 
@@ -145,12 +147,42 @@ export class Background extends Container {
     }
     this.addChild(this.planes.far, this.planes.mid, this.planes.near);
 
-    this.vignette = new Sprite(radialTexture('rgba(0,0,0,0)', 'rgba(0,0,0,0.82)', 0.34));
+    this.vignette = new Sprite(radialTexture('rgba(0,0,0,0)', 'rgba(0,0,0,0.86)', 0.30));
     this.floorGlow = new Sprite(radialTexture('rgba(255,140,40,0.55)', 'rgba(255,140,40,0)', 0.02));
+    this.keyLight = new Sprite(radialTexture('rgba(255,196,120,0.20)', 'rgba(255,196,120,0)', 0.04));
     this.vignette.anchor.set(0.5);
     this.floorGlow.anchor.set(0.5);
-    this.grade.addChild(this.floorGlow, this.vignette);
+    this.keyLight.anchor.set(0.5);
+    this.grade.addChild(this.floorGlow, this.keyLight, this.vignette);
     this.addChild(this.grade);
+  }
+
+  /**
+   * Point the room's lighting at the board.
+   *
+   * The scene art is painted at full contrast edge to edge — braziers, lit
+   * stone, hot seams — and the reel window is deliberately dark, so the
+   * BACKGROUND was the brightest thing on screen and the eye went to the
+   * furniture instead of the game. Every commercial slot solves this the same
+   * way: the room is a lit stage with the reels standing in the pool of light
+   * and everything outside it falling off.
+   *
+   * So the vignette is no longer centred on the viewport and sized off it — it
+   * is centred on the BOARD and sized so its clear middle covers the cabinet
+   * and its falloff starts immediately outside. A soft warm pool sits behind
+   * the board on top of that, which separates the housing from the wall without
+   * touching the artwork.
+   *
+   * Called from the presenter's resize, so it tracks every layout.
+   */
+  focus(cx: number, cy: number, w: number, h: number): void {
+    const span = Math.max(w, h);
+    const v = span * 2.7;
+    this.vignette.width = this.vignette.height = v;
+    this.vignette.position.set(cx, cy);
+    const kl = span * 1.9;
+    this.keyLight.width = this.keyLight.height = kl;
+    this.keyLight.position.set(cx, cy);
   }
 
   /** True once any authored scene texture is present. */
@@ -183,10 +215,14 @@ export class Background extends Container {
       if (!per.near.painted) drawForeground(per.near.gfx, w, h, pal);
     }
 
-    // vignette covers the stage with headroom; the glow sits on the floor line
-    const v = Math.max(w, h) * 1.5;
-    this.vignette.width = this.vignette.height = v;
-    this.vignette.position.set(w / 2, h / 2);
+    // The vignette is placed by `focus`, which the presenter drives from the
+    // board rect. This is only the fallback for the frame before the first
+    // layout lands — without it a resize with no focus yet shows an unlit room.
+    if (this.vignette.width <= 1) {
+      const v = Math.max(w, h) * 1.5;
+      this.vignette.width = this.vignette.height = v;
+      this.vignette.position.set(w / 2, h / 2);
+    }
     this.floorGlow.width = w * 1.7;
     this.floorGlow.height = h * 0.9;
     this.floorGlow.position.set(w / 2, h * 1.02);

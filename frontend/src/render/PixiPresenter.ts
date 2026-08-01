@@ -295,6 +295,9 @@ export class PixiPresenter implements Presenter {
     this.lblSpinWin.position.set(w - pad, top);
     this.lblSpins.position.set(w - pad, top + 22);
     this.lblVault.position.set(w - pad, top + 42);
+    // point the room's lighting at the cabinet, not at the middle of the screen
+    this.bg.focus(lay.boardX + lay.boardW / 2, lay.boardY + lay.boardH / 2,
+      lay.boardW + lay.band * 2, lay.boardH + lay.band * 2);
     this.banner.resize(w, playH);
     this.toastView.resize(w, playH);
     this.placeSmith(w, playH, lay.boardX, lay.boardY, lay.boardH);
@@ -496,7 +499,13 @@ export class PixiPresenter implements Presenter {
     }
     this.cam.to(1.14);
     this.cam.kick(18);
-    await this.banner.show('★ MAX WIN ★', 15000, this.ctx);
+    await this.banner.show(tierName(15000), 15000, this.ctx, true, {
+      onTier: (_name, tier) => {
+        this.cam.kick(6 + tier * 3);
+        this.coins.erupt(this.app.renderer.width, this.app.renderer.height,
+          10 + tier * 10);
+      },
+    });
     this.cam.reset();
   }
 
@@ -511,7 +520,20 @@ export class PixiPresenter implements Presenter {
       // push in for the count-up and release after it: the shot itself says
       // this one is bigger, which no amount of banner styling can
       this.cam.to(amount >= 500 ? 1.10 : amount >= 100 ? 1.06 : 1.03);
-      await this.banner.show(tierName(amount), amount, this.ctx);
+      // The counter climbs THROUGH the tiers, and the shot climbs with it —
+      // each crossing kicks the camera, throws coins and re-stings, so a big
+      // win is a sequence of escalating beats rather than one number arriving.
+      await this.banner.show(tierName(amount), amount, this.ctx, true, {
+        onTier: (_name, tier) => {
+          if (tier < 1) return;
+          this.cam.kick(4 + tier * 3);
+          this.cam.to(1.03 + tier * 0.025);
+          this.flashChroma(0.2 + tier * 0.09, 420);
+          this.audio?.stinger('bigwin', 'sting_bigwin');
+          this.coins.erupt(this.app.renderer.width, this.app.renderer.height,
+            8 + tier * 8);
+        },
+      });
       this.cam.reset();
     }
   }

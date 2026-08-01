@@ -412,15 +412,59 @@ export class BoardView extends Container {
     await Promise.all(anchors.map((sp) => this.land(sp, 0.85, ctx)));
   }
 
-  /** Celebrate the relics that paid, so a win is legible on the board itself. */
+  /**
+   * Celebrate the relics that paid, so a win is legible on the board itself.
+   *
+   * Pulsing the winners alone is not enough on a 30-cell grid: on a busy board
+   * a symbol that grows 8% is lost among twenty-nine others of equal weight.
+   * Every commercial slot answers this by taking the board AWAY — the cells
+   * that did not pay dim right down, and what is left standing in full light is
+   * the win. The dim is what makes the pulse readable, not decoration on top
+   * of it.
+   */
   async celebrate(cells: { r: number; c: number }[], ctx: AnimCtx): Promise<void> {
     if (!cells.length) return;
+    const won = new Set(cells.map(({ r, c }) => r * this.cols + c));
     const sprites = cells.map(({ r, c }) => this.at(r, c));
+    const rest = this.cells.filter((_, i) => !won.has(i));
     for (const sp of sprites) sp.setWinning(true);
+    // a halo under each paying cell, so the lit ones read as lit rather than
+    // merely as the ones that were not dimmed
+    if (!ctx.reduced) {
+      const g = this.links;
+      g.clear();
+      for (const { r, c } of cells) {
+        const p = this.cellCenter(r, c);
+        g.circle(p.x, p.y, this.cell * 0.62)
+          .fill({ color: 0xffcf7a, alpha: 0.13 });
+      }
+      g.alpha = 0;
+      await tween({
+        duration: 150, shouldSkip: ctx.shouldSkip,
+        onUpdate: (t) => {
+          g.alpha = t;
+          for (const sp of rest) sp.alpha = 1 - 0.62 * t;
+        },
+      });
+    }
     // The pulse still runs: it is what a symbol WITHOUT authored frames gets,
     // and under one it reads as the loop being emphasised rather than replaced.
     await Promise.all(sprites.map((sp) => pulse(sp, 2, 420, ctx)));
     for (const sp of sprites) sp.setWinning(false);
+    if (!ctx.reduced) {
+      await tween({
+        duration: 170, shouldSkip: ctx.shouldSkip,
+        onUpdate: (t) => {
+          this.links.alpha = 1 - t;
+          for (const sp of rest) sp.alpha = 0.38 + 0.62 * t;
+        },
+      });
+    }
+    // unconditional: a skip resolves the tweens early and the board must never
+    // be left with half its cells dimmed
+    this.links.clear();
+    this.links.alpha = 1;
+    for (const sp of rest) sp.alpha = 1;
   }
 
   async gravity(board: Board, spawned: Spawned[], ctx: AnimCtx): Promise<void> {

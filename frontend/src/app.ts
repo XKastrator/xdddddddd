@@ -442,6 +442,13 @@ async function main(): Promise<void> {
     perfTier: () => perf.tier,
     /** Force a quality tier. Changes how the game LOOKS, never what it pays. */
     setQuality: (n: number) => { perf.force(n); return perf.tier; },
+    /**
+     * Hold a quality tier and stop the guard adjusting it. Capture and QA only
+     * — a screen-recording harness stalls frames, which the guard correctly
+     * reads as a weak device, so an unpinned recording shows the degraded game
+     * rather than the real one.
+     */
+    pinQuality: (n: number) => perf.pin(n),
     betText: () => formatMoney(costUnits(), currency),
     turboOn: () => turbo,
     autoplay: () => autoplayFn(),
