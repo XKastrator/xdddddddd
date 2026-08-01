@@ -29,6 +29,20 @@ const ART_FILL = 1.1;
 export class SymbolSprite extends Container {
   private glow = new Graphics();
   private tile = new Graphics();
+  /**
+   * The scatter's own halo, and only the scatter's.
+   *
+   * A scatter is on this board 30% of the time — measured over 30,000 base
+   * books — and the single loudest piece of feedback on the game was that it
+   * has "no scatter at all". It was there; nothing said so. On a reference
+   * board the scatter is the most elaborately animated symbol by a wide margin,
+   * moving CONSTANTLY, so it is the one thing on a still board that draws the
+   * eye. This ring is that, and it exists only on scatter cells.
+   */
+  private ring = new Graphics();
+  private ringT = 0;
+  /** Landing pop: 1 at the instant it lands, decaying to 0. */
+  private pop = 0;
   private art = new Sprite();
   private txt: Text;
   private size: number;
@@ -66,7 +80,8 @@ export class SymbolSprite extends Container {
     });
     this.txt.anchor.set(0.5);
     this.txt.position.set(size / 2, size / 2);
-    this.addChild(this.glow, this.tile, this.art, this.txt);
+    this.ring.visible = false;
+    this.addChild(this.glow, this.ring, this.tile, this.art, this.txt);
     this.setSymbol(Sym.EMPTY);
   }
 
@@ -86,6 +101,61 @@ export class SymbolSprite extends Container {
   /** True for relics: they are hot metal and get idle life. Ore stays inert. */
   get animatable(): boolean {
     return this.sym >= Sym.BRONZE && this.sym <= Sym.CINDER;
+  }
+
+  /** Announce a landing: a hard flash that decays over ~350ms. */
+  flash(): void { this.pop = 1; }
+
+  /**
+   * Per-frame life that is NOT the idle breath: the scatter's turning halo and
+   * any landing flash. Runs for every cell because the flash applies to all of
+   * them, but the halo geometry is only ever built for a scatter.
+   */
+  tickSpecial(dt: number, reduced: boolean): void {
+    const scatter = this.sym === Sym.CINDER;
+    if (this.pop > 0) {
+      this.pop = Math.max(0, this.pop - dt * 2.8);
+      const k = this.pop * this.pop;
+      this.glow.alpha = 1 + k * 2.2;
+      if (!scatter && k <= 0) this.glow.alpha = 1;
+    }
+    if (!scatter || reduced) {
+      if (this.ring.visible && (!scatter || reduced)) this.ring.visible = false;
+      return;
+    }
+    this.ringT += dt;
+    this.ring.visible = true;
+    const s = this.size;
+    const g = this.ring;
+    g.clear();
+    // two counter-rotating arcs plus a breathing disc: cheap, and it never
+    // stops, which is the entire point
+    const beat = 0.5 + 0.5 * Math.sin(this.ringT * 3.1);
+    g.circle(s / 2, s / 2, s * (0.36 + 0.05 * beat))
+      .fill({ color: 0xff9a2e, alpha: 0.16 + 0.16 * beat + this.pop * 0.5 });
+    for (const [dir, r0, w] of [[1, 0.44, 0.05], [-1, 0.5, 0.033]] as
+      [number, number, number][]) {
+      const a0 = this.ringT * 1.9 * dir;
+      for (let i = 0; i < 3; i++) {
+        const a = a0 + (i * Math.PI * 2) / 3;
+        g.arc(s / 2, s / 2, s * r0, a, a + 0.7)
+          .stroke({ width: s * w, color: 0xffd98a,
+            alpha: 0.55 + 0.3 * beat + this.pop * 0.4, cap: 'round' });
+      }
+    }
+  }
+
+  /**
+   * Drive the artwork white-hot. Used while a group is being consumed by a
+   * fusion: the metal is being heated, so it should LOOK heated rather than
+   * have a line drawn to it.
+   */
+  setHot(t: number): void {
+    const k = Math.max(0, Math.min(1, t));
+    // tint MULTIPLIES, so the hot end has to stay near white or the artwork
+    // goes dark instead of bright; the heat reads through the glow behind it
+    this.art.tint = mix(0xffffff, 0xffdca6, k);
+    this.glow.alpha = 1 + k * 3.4;
   }
 
   /**
@@ -171,6 +241,9 @@ export class SymbolSprite extends Container {
     this.loop = null;
     // a cell being repainted must not keep the previous symbol's bend
     this.endDeform();
+    this.setHot(0);
+    this.pop = 0;
+    if (sym !== Sym.CINDER) { this.ring.visible = false; this.ring.clear(); }
     this.sym = sym;
     const tex = sym === Sym.EMPTY ? undefined : this.getTexture?.(sym);
     if (tex) { this.drawFromAtlas(tex); return; }

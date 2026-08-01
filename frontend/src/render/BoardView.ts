@@ -72,6 +72,20 @@ export class BoardView extends Container {
    * fires, without a tutorial.
    */
   private callouts: GlyphText[] = [];
+  /**
+   * Particle emitter, in BOARD-LOCAL coordinates. Supplied by the presenter,
+   * which owns the particle layer; the board knows WHERE things happen and the
+   * presenter knows WHAT it can draw with.
+   */
+  sparks: ((x: number, y: number, n: number, speed?: number, color?: number) => void)
+    | null = null;
+  /**
+   * Fired the instant a scatter lands, with how many are on the board so far.
+   * Every commercial slot acknowledges each scatter as it arrives — sound,
+   * flash, a running count — including at two, where nothing has been won yet.
+   * Without it a 30%-of-spins symbol is invisible.
+   */
+  onScatter: ((count: number) => void) | null = null;
 
   constructor(cols: number, rows: number, cell: number, gap: number, gapX: number,
               getTexture?: TextureProvider, getWinLoop?: WinLoopProvider,
@@ -221,7 +235,8 @@ export class BoardView extends Container {
    * a phase offset from its index so the grid never pulses in lockstep.
    */
   tickIdle(elapsed: number, reduced: boolean, dt = 0): void {
-    for (const sp of this.cells) sp.tickWin(dt);
+    for (const sp of this.cells) { sp.tickWin(dt); sp.tickSpecial(dt, reduced); }
+    for (const sp of this.spare) sp.tickSpecial(dt, reduced);
     if (reduced) return;
     for (let i = 0; i < this.cells.length; i++) {
       const sp = this.cells[i];
@@ -300,6 +315,7 @@ export class BoardView extends Container {
     const strips = Array.from({ length: cols }, (_, c) => this.strip(c));
     const prev = strips.map(() => new Array<number>(rows + 1).fill(0));
     const landed = new Array<boolean>(cols).fill(false);
+    let scatters = 0;
     for (let c = 0; c < cols; c++) {
       for (const sp of strips[c]) { sp.visible = true; sp.alpha = 1; }
     }
@@ -332,7 +348,18 @@ export class BoardView extends Container {
               landed[c] = true;
               this.spare[c].visible = false;
               for (let r = 0; r < rows; r++) {
-                this.at(r, c).setSymbol(board[r]?.[c] ?? Sym.EMPTY);
+                const sp = this.at(r, c);
+                sp.setSymbol(board[r]?.[c] ?? Sym.EMPTY);
+                // Each scatter is announced AS IT LANDS, while the reels to its
+                // right are still running. Announcing them all at the end would
+                // be a summary; announcing them one at a time is the build.
+                if (sp.sym === Sym.CINDER) {
+                  scatters++;
+                  sp.flash();
+                  const p = this.cellCenter(r, c);
+                  this.sparks?.(p.x, p.y, 14, 2.6, 0xffb347);
+                  this.onScatter?.(scatters);
+                }
               }
             }
             const p = Math.min(1, (now - stopAt[c]) / STOP);
@@ -561,42 +588,40 @@ export class BoardView extends Container {
     const home = all.map((n) => ({ x: n.sp.x, y: n.sp.y }));
 
     if (!ctx.reduced) {
+      // NO DRAWN CORD.
+      //
+      // This used to stroke a line from cell to cell along the chain. A line
+      // between two symbols is what a payline slot draws, and drawn with
+      // Graphics it reads as exactly what it is: a stroke on top of the
+      // artwork. The group is a group because the METAL IS HEATED — so the
+      // heat is what plays. Each cell in turn goes white-hot, swells, and
+      // throws sparks; the eye follows the heat down the chain without a
+      // single line being drawn.
+      const fired = chains.map((ch) => new Array<boolean>(ch.nodes.length).fill(false));
       await tween({
-        duration: 420, shouldSkip: ctx.shouldSkip,
+        duration: 460, shouldSkip: ctx.shouldSkip,
         onUpdate: (t) => {
           const g = this.links;
           g.clear();
-          for (const ch of chains) {
-            const n = ch.nodes.length;
-            // how far the spark has travelled along this chain, in nodes
-            const head = t * n;
-            const pts = [...ch.nodes.map((x) => x.p), ch.anchor];
-            // the trail behind the spark, drawn as a warm cord
-            for (let i = 0; i < pts.length - 1; i++) {
-              const seg = Math.max(0, Math.min(1, head - i));
-              if (seg <= 0) break;
-              const a = pts[i], b = pts[i + 1];
-              g.moveTo(a.x, a.y)
-                .lineTo(a.x + (b.x - a.x) * seg, a.y + (b.y - a.y) * seg)
-                .stroke({ width: 3 + 3 * seg, color: 0xffc46a,
-                  alpha: 0.85, cap: 'round' });
-            }
-            // Each cell lights the instant the spark reaches it — and it is
-            // OUTLINED, not merely glowed. A halo says "something happened
-            // here"; a frame around the exact cell says "this one is IN the
-            // group", which is the fact the animation exists to communicate.
+          for (let ci = 0; ci < chains.length; ci++) {
+            const ch = chains[ci];
+            // how far the heat has travelled along this chain, in cells
+            const head = t * (ch.nodes.length + 0.6);
             for (let i = 0; i < ch.nodes.length; i++) {
               const lit = Math.max(0, Math.min(1, head - i));
               if (lit <= 0) continue;
-              const p = pts[i];
-              const half = this.cell * 0.5;
-              const rr = this.cell * 0.14;
-              g.roundRect(p.x - half, p.y - half, this.cell, this.cell, rr)
-                .fill({ color: 0xffcf7a, alpha: 0.16 * lit });
-              g.roundRect(p.x - half, p.y - half, this.cell, this.cell, rr)
-                .stroke({ width: Math.max(2, this.cell * 0.035),
-                  color: 0xffe0a0, alpha: 0.35 + 0.6 * lit });
-              ch.nodes[i].sp.scale.set(1 + 0.22 * Math.sin(lit * Math.PI));
+              const n = ch.nodes[i];
+              n.sp.setHot(lit);
+              n.sp.scale.set(1 + 0.18 * Math.sin(lit * Math.PI * 0.9));
+              // a pool of heat under the cell, filled rather than outlined
+              g.circle(n.p.x, n.p.y, this.cell * (0.34 + 0.26 * lit))
+                .fill({ color: 0xff8a1e, alpha: 0.1 + 0.16 * lit });
+              g.circle(n.p.x, n.p.y, this.cell * (0.16 + 0.14 * lit))
+                .fill({ color: 0xffe6b8, alpha: 0.12 + 0.2 * lit });
+              if (!fired[ci][i] && lit > 0.45) {
+                fired[ci][i] = true;
+                this.sparks?.(n.p.x, n.p.y, 9, 2.2, 0xffb347);
+              }
             }
           }
         },
@@ -650,6 +675,7 @@ export class BoardView extends Container {
     for (let i = 0; i < all.length; i++) {
       all[i].sp.x = home[i].x; all[i].sp.y = home[i].y;
       all[i].sp.alpha = 1; all[i].sp.scale.set(1);
+      all[i].sp.setHot(0);
     }
 
     // ---- 3. THE PRODUCT ARRIVES -------------------------------------------
@@ -672,8 +698,14 @@ export class BoardView extends Container {
           g.clear();
           for (const r of rings) {
             const rad = this.cell * (0.35 + (0.5 + r.n * 0.09) * t);
+            // a expanding shell of light, not an outline: two filled discs with
+            // the inner one punched back out by the background is not available
+            // in Graphics, so this is a wide soft band that thins as it grows
             g.circle(r.p.x, r.p.y, rad)
-              .stroke({ width: 6 * (1 - t), color: 0xffd98a, alpha: 0.9 * (1 - t) });
+              .stroke({ width: this.cell * 0.3 * (1 - t) ** 1.6,
+                color: 0xffd98a, alpha: 0.55 * (1 - t) });
+            g.circle(r.p.x, r.p.y, rad * 0.86)
+              .fill({ color: 0xff8a1e, alpha: 0.1 * (1 - t) });
           }
         },
       }).then(() => this.links.clear());
