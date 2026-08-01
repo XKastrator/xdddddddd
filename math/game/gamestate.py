@@ -51,6 +51,50 @@ def _relic_list(board, paytable):
     return relics
 
 
+def _serialize_veins(veins):
+    return [{
+        "sym": v.sym,
+        "cells": [list(rc) for rc in v.cells],
+        "wildCells": [list(rc) for rc in v.wild_cells],
+        "columns": v.columns,
+        "value": round(v.value, 4),
+    } for v in veins]
+
+
+def run_veins(book, board, cfg, rng, fill_syms, fill_weights, heat, heat_cap,
+              by_columns: bool):
+    """THE VEIN — resolve seam-to-crucible runs until the board is stable.
+
+    `by_columns` is the whole difference between the base game and the bonus:
+    in the base the meter gains +1 per vein and resets every spin, and in the
+    bonus it gains the vein's COLUMN COUNT and persists across the round. That
+    single switch is what gives the feature a tail without making the base game
+    swingy — measured, the bonus reaches five figures while the base tops out in
+    the low hundreds.
+
+    Returns (heat, pay_with_heat, pay_base).
+    """
+    pay_heat = 0.0
+    pay_base = 0.0
+    steps = 0
+    while steps < MAX_CASCADE_STEPS:
+        step = B.resolve_veins(board, cfg.column_pay, cfg.vein_length_bonus)
+        if not step.veins:
+            break
+        gain = (sum(v.columns for v in step.veins) if by_columns
+                else step.heat_gain)
+        heat = min(heat + gain, heat_cap)
+        step_base = sum(v.value for v in step.veins)
+        pay_base += step_base
+        pay_heat += step_base * heat
+        if book.record:
+            E.strike(book, _serialize_veins(step.veins), heat)
+        spawned = B.apply_gravity_and_refill(board, rng, fill_syms, fill_weights)
+        E.gravity(book, spawned, board)
+        steps += 1
+    return heat, pay_heat, pay_base
+
+
 def run_cascades(book, board, cfg, rng, fill_syms, fill_weights, heat, heat_cap):
     """Resolve fusions until stable.
 
@@ -58,6 +102,9 @@ def run_cascades(book, board, cfg, rng, fill_syms, fill_weights, heat, heat_cap)
       pay_heat_total = sum(value(product) * Heat_after_step)  [base/bonus pay]
       pay_base_total = sum(value(product))                    [super vault bank]
     """
+    if getattr(cfg, "mechanic", "fusion") == "vein":
+        return run_veins(book, board, cfg, rng, fill_syms, fill_weights,
+                         heat, heat_cap, by_columns=heat_cap > 25)
     pay_heat = 0.0
     pay_base = 0.0
     steps = 0
@@ -97,8 +144,17 @@ def play_forge_fury(book, cfg, rng, spins, fill_syms, fill_weights, heat_cap,
     E.bonus_start(book, "forge_fury", spins, "free")
     heat = 1
     if hot:  # forced max-win construction: rich seed + hot start + extra spins
-        fill_syms = [S.BRONZE, S.IRON, S.SILVER, S.GOLD, S.WILD]
-        fill_weights = [14.0, 22.0, 26.0, 20.0, 10.0]
+        if getattr(cfg, "mechanic", "fusion") == "vein":
+            # Under THE VEIN a "rich" seed of finished relics is worthless —
+            # `find_veins` walks ORE variants, so a board of bronze and gold
+            # never connects anything and the forced max-win round paid nothing.
+            # Rich here means DENSE: two ore types and a lot of Flux, so a vein
+            # connects on nearly every spin and the column meter compounds.
+            fill_syms = [S.O1, S.O2, S.WILD]
+            fill_weights = [26.0, 26.0, 16.0]
+        else:
+            fill_syms = [S.BRONZE, S.IRON, S.SILVER, S.GOLD, S.WILD]
+            fill_weights = [14.0, 22.0, 26.0, 20.0, 10.0]
         heat = 15
         spins = max(spins, 22)
     remaining, total = spins, spins
@@ -132,8 +188,12 @@ def play_molten_core(book, cfg, rng, hot=False):
     vault = 0.0
     fill_syms, fill_weights = cfg.super_symbols, cfg.drop_weights_super
     if hot:  # forced max-win construction: rich seed + hot start
-        fill_syms = [S.BRONZE, S.IRON, S.SILVER, S.GOLD, S.WILD]
-        fill_weights = [26.0, 30.0, 26.0, 12.0, 8.0]
+        if getattr(cfg, "mechanic", "fusion") == "vein":
+            fill_syms = [S.O1, S.O2, S.WILD]
+            fill_weights = [26.0, 26.0, 18.0]
+        else:
+            fill_syms = [S.BRONZE, S.IRON, S.SILVER, S.GOLD, S.WILD]
+            fill_weights = [26.0, 30.0, 26.0, 12.0, 8.0]
         heat = 30
     total = cfg.super_spins
     for i in range(cfg.super_spins):

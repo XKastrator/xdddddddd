@@ -68,8 +68,10 @@ for (const [label, vp] of [['mobile', { width: 390, height: 844 }],
   const helpText = await page.textContent('.overlay-body');
   check(`[${label}] help shows RTP`, helpText.includes('96.50%'));
   check(`[${label}] help shows max win`, helpText.includes('15,000×'));
-  check(`[${label}] help lists the rank ladder`,
-    helpText.includes('Mythril') && helpText.includes('Molten Crown'));
+  // The paytable is the COLUMN table now: a vein is worth what its width says,
+  // so the help must show that and the numbers must be the engine's own.
+  check(`[${label}] help lists the column paytable`,
+    helpText.includes('Columns crossed') && helpText.includes('0.09900×'));
   await page.screenshot({ path: path.join(SHOTS, `${label}-help.png`) });
   await page.keyboard.press('Escape');               // Escape closes the overlay
   await page.waitForFunction(() => !document.querySelector('.overlay:not([hidden])'),
@@ -128,7 +130,8 @@ for (const [label, vp] of [['mobile', { width: 390, height: 844 }],
   await page.evaluate(() => window.__ui.help());
   await page.waitForSelector('.overlay:not([hidden])', { timeout: 5000 });
   const pl = await page.textContent('.overlay-body');
-  check('[i18n] help localised (pl)', pl.includes('Drabina rang') && pl.includes('Odpowiedzialna gra'));
+  check('[i18n] help localised (pl)',
+    pl.includes('Przecięte kolumny') && pl.includes('Odpowiedzialna gra'));
   check('[i18n] RTP/max win still shown', pl.includes('96.50%') && pl.includes('15,000×'));
   await page.screenshot({ path: path.join(SHOTS, 'help-pl.png') });
   await page.close();

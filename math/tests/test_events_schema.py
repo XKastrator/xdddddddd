@@ -15,13 +15,14 @@ from game.gamestate import play_book
 from engine.rng import Rng
 
 VALID_TYPES = {
-    "revealBoard", "anticipation", "forge", "gravity", "heatUpdate",
+    "revealBoard", "anticipation", "forge", "strike", "gravity", "heatUpdate",
     "settleWin", "bonusStart", "spinCounter", "retrigger", "superSeed",
     "lockUpdate", "pour", "totalWinUpdate", "maxWin", "finalWin", "roundEnd",
 }
 REQUIRED_FIELDS = {
     "revealBoard": {"board", "heat", "spinKind", "scatters"},
     "forge": {"fusions", "heat"},
+    "strike": {"veins", "heat"},
     "gravity": {"spawned", "board"},
     "settleWin": {"win", "heat"},
     "bonusStart": {"mode", "spins", "kind"},
@@ -43,6 +44,21 @@ def _check_book(bd, cfg):
         idxs.append(ev["index"])
         for f in REQUIRED_FIELDS.get(ev["type"], set()):
             assert f in ev, f"{ev['type']} missing {f}"
+        if ev["type"] == "strike":
+            # A vein the renderer cannot draw is worse than no event: it must
+            # carry the path, the Flux cells that bridged it, and the shape it
+            # was paid for. Checked here because the front end reconstructs the
+            # whole round from these events and nothing else.
+            assert ev["veins"], "strike with no veins"
+            for v in ev["veins"]:
+                assert set(v.keys()) == {"sym", "cells", "wildCells",
+                                         "columns", "value"}, v.keys()
+                assert v["cells"], "vein with no ore cells"
+                rows = {r for r, _ in v["cells"] + v["wildCells"]}
+                assert 0 in rows, "vein does not touch the seam"
+                assert max(rows) == cfg.num_rows - 1, "vein misses the crucible"
+                assert 1 <= v["columns"] <= cfg.num_reels, v["columns"]
+                assert v["value"] > 0, v["value"]
     # indices are contiguous 0..n-1
     assert idxs == list(range(len(idxs)))
     # a completed round always ends with roundEnd and has a finalWin

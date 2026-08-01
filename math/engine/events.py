@@ -72,6 +72,18 @@ def forge(book, fusions, heat):
     return book.emit("forge", fusions=fusions, heat=heat)
 
 
+def strike(book, veins, heat):
+    """THE VEIN's payout event.
+
+    Deliberately NOT reusing `forge`: a fusion turns several cells into one new
+    cell of a different symbol, and a vein pays a path and clears it. They carry
+    different data and the renderer has to draw different things, so sharing an
+    event name would only make the player-facing animation guess which one it
+    was looking at.
+    """
+    return book.emit("strike", veins=veins, heat=heat)
+
+
 def gravity(book, spawned, board):
     if not book.record:
         return None

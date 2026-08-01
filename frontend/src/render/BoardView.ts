@@ -4,7 +4,7 @@
  * carried by events; it never decides outcomes.
  */
 import { Container, FillGradient, Graphics } from 'pixi.js';
-import type { Board, Fusion, Spawned } from '../types/events';
+import type { Board, Fusion, Spawned, Vein } from '../types/events';
 import { Sym } from '../types/events';
 import { SymbolSprite, type TextureProvider, type WinLoopProvider } from './SymbolSprite';
 import { tween, wait, easeOutBack, easeOutCubic } from './tween';
@@ -856,6 +856,114 @@ export class BoardView extends Container {
       },
     });
     for (const tag of tags) tag.visible = false;
+  }
+
+  /**
+   * THE VEIN pays: light the run from the seam down to the crucible, then
+   * drain it.
+   *
+   * The whole animation is one idea, because the mechanic is one idea. Ore does
+   * not "combine" here — a run of it that reaches all the way down is a channel,
+   * and what a channel does is CARRY. So the light starts at the top cell and
+   * travels down the path in order, each cell going white-hot as the flow
+   * reaches it; when it arrives at the crucible the vein is fully lit and drains
+   * out of the bottom. No lines are drawn between cells: the cells themselves
+   * ARE the line, which is the entire point of the mechanic.
+   */
+  async strike(veins: Vein[], ctx: AnimCtx, heat = 1): Promise<void> {
+    if (!veins.length) return;
+    // Order each vein by ROW so the flow runs seam-to-crucible rather than in
+    // whatever order the solver happened to walk the flood.
+    const paths = veins.map((v) => {
+      const cells = [...v.cells, ...v.wildCells]
+        .slice()
+        .sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+      return { v, cells, sprites: cells.map(([r, c]) => this.at(r, c)) };
+    });
+    const lit = paths.map((p) => new Array<boolean>(p.cells.length).fill(false));
+
+    if (!ctx.reduced) {
+      // everything not in a vein recedes, so the channel is the only thing lit
+      const inVein = new Set<number>();
+      for (const p of paths) for (const [r, c] of p.cells) inVein.add(r * this.cols + c);
+      const rest = this.cells.filter((_, i) => !inVein.has(i));
+
+      const tags = paths.map((p, i) => {
+        const t = this.callout(i);
+        t.text = `${p.v.columns} KOLUMN`;
+        const mid = p.cells[Math.floor(p.cells.length / 2)];
+        const q = this.cellCenter(mid[0], mid[1]);
+        const half = Math.max(this.cell * 0.6, t.contentWidth / 2 + this.cell * 0.1);
+        t.position.set(Math.max(half, Math.min(this.width2 - half, q.x)), q.y);
+        t.visible = true; t.alpha = 0;
+        return t;
+      });
+
+      await tween({
+        duration: 520, shouldSkip: ctx.shouldSkip,
+        onUpdate: (t) => {
+          const g = this.links;
+          g.clear();
+          for (const sp of rest) sp.alpha = 1 - 0.62 * Math.min(1, t * 2);
+          for (let i = 0; i < paths.length; i++) {
+            const p = paths[i];
+            const head = t * (p.cells.length + 0.5);
+            for (let k = 0; k < p.cells.length; k++) {
+              const flow = Math.max(0, Math.min(1, head - k));
+              if (flow <= 0) continue;
+              p.sprites[k].setHot(flow);
+              p.sprites[k].scale.set(1 + 0.14 * Math.sin(flow * Math.PI * 0.9));
+              const q = this.cellCenter(p.cells[k][0], p.cells[k][1]);
+              g.circle(q.x, q.y, this.cell * (0.3 + 0.24 * flow))
+                .fill({ color: 0xff8a1e, alpha: 0.1 + 0.18 * flow });
+              if (!lit[i][k] && flow > 0.5) {
+                lit[i][k] = true;
+                this.sparks?.(q.x, q.y, 7, 2.0, 0xffb347);
+              }
+            }
+            tags[i].alpha = Math.min(1, t * 2.4);
+            tags[i].scale.set(0.75 + 0.4 * easeOutBack(Math.min(1, t * 1.5)));
+          }
+        },
+      });
+      for (let i = 0; i < paths.length; i++) {
+        tags[i].text = `${(paths[i].v.value * heat).toFixed(2)}×`;
+      }
+      // the channel drains: the run empties downward out of the crucible
+      await tween({
+        duration: 360, ease: easeOutCubic, shouldSkip: ctx.shouldSkip,
+        onUpdate: (t) => {
+          this.links.alpha = 1 - t;
+          for (const p of paths) {
+            for (let k = 0; k < p.sprites.length; k++) {
+              const sp = p.sprites[k];
+              // lower cells leave first, so the vein empties from the bottom
+              const lag = 1 - k / Math.max(1, p.sprites.length - 1);
+              const local = Math.max(0, Math.min(1, t * 1.6 - lag * 0.5));
+              sp.y += this.cell * 0.055 * local;
+              sp.alpha = 1 - local;
+            }
+          }
+          for (const tag of tags) { tag.alpha = 1 - t * 0.6; tag.y -= this.cell * 0.008; }
+        },
+      });
+      for (const tag of tags) tag.visible = false;
+      for (const sp of rest) sp.alpha = 1;
+    }
+
+    // Unconditional: a skip resolves the tweens early and a cell left mid-drain
+    // would keep a stale offset and a hot tint for the rest of the round.
+    this.links.clear();
+    this.links.alpha = 1;
+    for (const p of paths) {
+      for (let k = 0; k < p.sprites.length; k++) {
+        const sp = p.sprites[k];
+        sp.setHot(0); sp.scale.set(1); sp.alpha = 1;
+        const home = this.homeOf(p.cells[k][0], p.cells[k][1]);
+        sp.x = home.x; sp.y = home.y;
+        sp.setSymbol(Sym.EMPTY);
+      }
+    }
   }
 
   /**

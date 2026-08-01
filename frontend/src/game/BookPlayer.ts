@@ -43,6 +43,7 @@ export class BookPlayer {
       case 'revealBoard': return p.revealBoard(ev.board, ev.heat, ev.spinKind, ev.scatters);
       case 'anticipation': return p.anticipation(ev.scatters, ev.needed);
       case 'forge': return p.forge(ev.fusions, ev.heat);
+      case 'strike': return p.strike ? p.strike(ev.veins, ev.heat) : undefined;
       case 'gravity': return p.gravity(ev.spawned, ev.board);
       case 'heatUpdate': return p.heat(ev.heat);
       case 'settleWin': return p.settleWin(ev.relics, ev.heat, ev.win);

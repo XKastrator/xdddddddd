@@ -6,7 +6,7 @@
  */
 import { Application, Container, Sprite } from 'pixi.js';
 import type { Presenter } from '../game/Presenter';
-import type { Board, Fusion, Relic, Spawned, SpinKind } from '../types/events';
+import type { Board, Fusion, Relic, Spawned, SpinKind, Vein } from '../types/events';
 import { Sym } from '../types/events';
 import { BoardView } from './BoardView';
 import { HeatMeter } from './HeatMeter';
@@ -470,6 +470,26 @@ export class PixiPresenter implements Presenter {
       const p = this.board.cellCenter(f.anchor[0], f.anchor[1]);
       this.fx.burst(p.x, p.y, 8 + Math.min(16, f.cells.length * 2));
     }
+    this.audio?.stinger('heat', 'sfx_heat');
+    this.flashShimmer(big ? 0.85 : 0.5);
+    this.setHazeFromHeat(heat, HEAT_CAP[this.kind]);
+    await this.heatMeter.set(heat, this.ctx);
+  }
+
+  /**
+   * THE VEIN paid. The shot reacts to the SHAPE, not the count: a run that
+   * crosses six columns is the rare thing, so that is what the camera and the
+   * shake are scaled by.
+   */
+  async strike(veins: Vein[], heat: number): Promise<void> {
+    this.fx.enabled = !this.reduced;
+    const widest = Math.max(...veins.map((v) => v.columns));
+    const big = widest >= 4;
+    this.audio?.stinger('forge', big ? 'sfx_forge_big' : 'sfx_forge');
+    this.smith?.play('strike');
+    this.cam.kick(Math.min(10, 2 + widest * 1.5));
+    await this.board.strike(veins, this.ctx, heat);
+    void shake(this.world, big ? 9 : 4.5, big ? 300 : 190, this.ctx);
     this.audio?.stinger('heat', 'sfx_heat');
     this.flashShimmer(big ? 0.85 : 0.5);
     this.setHazeFromHeat(heat, HEAT_CAP[this.kind]);

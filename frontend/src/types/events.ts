@@ -33,6 +33,27 @@ export interface Fusion {
   anchor: [number, number]; value: number;
 }
 export interface Forge extends BaseEvent { type: 'forge'; fusions: Fusion[]; heat: number; }
+
+/**
+ * THE VEIN's payout event.
+ *
+ * A vein is a run of one ore that reaches the TOP row (the seam) and the BOTTOM
+ * row (the crucible). It pays by how many COLUMNS it crosses and is then
+ * cleared. Deliberately not folded into `forge`: a fusion turns several cells
+ * into one new cell of a different symbol, a vein pays a path and drains it.
+ * Sharing an event name would force the renderer to guess which it was drawing.
+ */
+export interface Vein {
+  sym: Sym;
+  /** Ore cells of the vein, seam to crucible. */
+  cells: [number, number][];
+  /** Flux cells bridging it; one Flux may be shared by several veins. */
+  wildCells: [number, number][];
+  columns: number;
+  /** × bet BEFORE Heat. */
+  value: number;
+}
+export interface Strike extends BaseEvent { type: 'strike'; veins: Vein[]; heat: number; }
 export interface Spawned { r: number; c: number; sym: Sym; }
 export interface Gravity extends BaseEvent { type: 'gravity'; spawned: Spawned[]; board: Board; }
 export interface HeatUpdate extends BaseEvent { type: 'heatUpdate'; heat: number; }
@@ -54,7 +75,7 @@ export interface FinalWin extends BaseEvent { type: 'finalWin'; amount: number; 
 export interface RoundEnd extends BaseEvent { type: 'roundEnd'; }
 
 export type GameEvent =
-  | RevealBoard | Anticipation | Forge | Gravity | HeatUpdate | SettleWin
+  | RevealBoard | Anticipation | Forge | Strike | Gravity | HeatUpdate | SettleWin
   | BonusStart | SpinCounter | Retrigger | SuperSeed | LockUpdate | Pour
   | TotalWinUpdate | MaxWin | FinalWin | RoundEnd;
 

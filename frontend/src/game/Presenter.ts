@@ -7,8 +7,7 @@
  * animation finishes; `skip()`/turbo shorten these without changing outcomes.
  */
 import type {
-  Board, Fusion, Relic, Spawned, SpinKind,
-} from '../types/events';
+  Board, Fusion, Relic, Spawned, SpinKind, Vein } from '../types/events';
 
 export interface Presenter {
   /**
@@ -22,6 +21,8 @@ export interface Presenter {
   /** Stop a `beginSpin` that will never receive an outcome. */
   abortSpin?(): void;
   revealBoard(board: Board, heat: number, kind: SpinKind, scatters: number): Promise<void>;
+  /** THE VEIN paid: light the path from the seam to the crucible, then drain it. */
+  strike?(veins: Vein[], heat: number): Promise<void>;
   anticipation(scatters: number, needed: number): Promise<void>;
   forge(fusions: Fusion[], heat: number): Promise<void>;
   gravity(spawned: Spawned[], board: Board): Promise<void>;

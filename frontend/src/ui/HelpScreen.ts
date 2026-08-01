@@ -5,7 +5,7 @@
  */
 import { Overlay } from './Overlay';
 import { t } from '../i18n/strings';
-import { LADDER, MODES, RTP, MAX_WIN, FUSE_THRESHOLD, JUMP_STEP } from '../game/gameInfo';
+import { COLUMN_PAY, MODES, RTP, MAX_WIN } from '../game/gameInfo';
 import { Sym } from '../types/events';
 
 /** Atlas frame name per symbol — the help screen shows the real artwork. */
@@ -39,11 +39,13 @@ export class HelpScreen extends Overlay {
   /** Rebuild content (also used after a language change). */
   render(): void {
     this.setTitle(t('help.title'));
-    const ladderRows = LADDER.map((l) => `
+    // The paytable is now the COLUMN table: a vein's worth is set by how wide
+    // it runs, so that is the only thing worth tabulating. Values come from
+    // gameInfo, which mirrors the engine's own column_pay.
+    const ladderRows = COLUMN_PAY.map((l) => `
       <tr>
-        <td>${swatch(l.sym)}</td>
-        <td>${t(l.key)}</td>
-        <td class="num">${l.value === 0 ? '—' : l.value.toFixed(2) + '×'}</td>
+        <td><b>${l.columns}</b></td>
+        <td class="num">${l.value.toFixed(5)}×</td>
       </tr>`).join('');
 
     const modeRows = MODES.map((m) => `
@@ -59,14 +61,14 @@ export class HelpScreen extends Overlay {
         <div><span class="dim">${t('buy.maxwin')}</span><b>${MAX_WIN.toLocaleString()}×</b></div>
       </div>
 
-      <p>${t('help.core', { n: FUSE_THRESHOLD, j: JUMP_STEP })}</p>
+      <p>${t('help.core')}</p>
       <p>${t('help.pay')}</p>
       <p>${t('help.heat')}</p>
 
       <h3>${t('help.ladder')}</h3>
       <div class="scroll">
         <table>
-          <thead><tr><th></th><th>${t('help.symbol')}</th><th class="num">${t('help.value')}</th></tr></thead>
+          <thead><tr><th>${t('help.ladder')}</th><th class="num">${t('help.value')}</th></tr></thead>
           <tbody>${ladderRows}</tbody>
         </table>
       </div>
