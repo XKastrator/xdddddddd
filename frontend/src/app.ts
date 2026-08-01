@@ -222,11 +222,17 @@ async function main(): Promise<void> {
     // a round open on the server, and a round left open refuses every later bet.
     let placed = false;
     try {
+      // The reels start HERE, before the request goes out — the round's latency
+      // is spent spinning rather than standing still. Nothing about the outcome
+      // is implied: the strip shows random faces and the server's answer is
+      // what stops it. If the bet is refused the reels are stopped by the
+      // catch below.
+      presenter.skip = false;
+      presenter.reduced = turbo || reducedWanted();
+      presenter.beginSpin?.();
       const res = await rgs.play(bet, mode);
       placed = true;
       setBal(res.balance.amount);
-      presenter.skip = false;
-      presenter.reduced = turbo || reducedWanted();
       if (!res.round?.book) throw new Error('the RGS returned a round with no book');
       player = new BookPlayer(res.round.book, presenter);
       const winMult = await player.play();
@@ -237,6 +243,9 @@ async function main(): Promise<void> {
         bonus: (res.round.book?.events ?? []).some((e) => e.type === 'bonusStart'),
       };
     } catch (e) {
+      // the reels were started before the request; they must not keep turning
+      // over a round that is not going to happen
+      presenter.abortSpin?.();
       // RgsClientError carries the code in `.code`; its `.message` is the
       // human-readable "RGS ERR_IPB (402)". Comparing against `.message` meant
       // a live insufficient-balance response showed the generic round-failed

@@ -162,6 +162,8 @@ export class PixiPresenter implements Presenter {
       this.fx.burst(x, y, n, speed, color);
     };
     this.board.onScatter = (count) => this.scatterLanded(count);
+    // every reel stop is heard, not only the ones carrying a cinder
+    this.board.onReelStop = () => this.audio?.stinger('spin', 'sfx_spin');
 
     this.frame.layout(this.board.width2, this.board.height2, BASE_GAP, BASE_BAND);
     this.frame.setTitle('THE DEEPFORGE');
@@ -628,6 +630,28 @@ export class PixiPresenter implements Presenter {
   }
 
   setMode(name: string): void { this.lblMode.text = name.toUpperCase(); }
+
+  /**
+   * Start the reels with no outcome in hand.
+   *
+   * Called the instant the player presses the button, BEFORE the bet request
+   * goes out, so the request's latency is spent spinning instead of standing
+   * still. The reference implementation does exactly this — its reels loop
+   * while the request is in flight — and it is the difference between a game
+   * that responds to a click and one that thinks about it first.
+   */
+  beginSpin(): void {
+    if (this.reduced) return;
+    this.audio?.stinger('spin', 'sfx_spin');
+    this.board.beginSpin(this.reduced);
+  }
+
+  /**
+   * Stop reels that will never get an outcome — a refused bet, a dropped
+   * connection. Leaving them turning over a round that is not happening is
+   * worse than never having started them.
+   */
+  abortSpin(): void { this.board.abortSpin(); }
 
   /** Player-facing status, drawn on the canvas where the player is looking. */
   toast(message: string): void { this.toastView.show(message); }

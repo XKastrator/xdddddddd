@@ -86,6 +86,29 @@ export class BoardView extends Container {
    * Without it a 30%-of-spins symbol is invisible.
    */
   onScatter: ((count: number) => void) | null = null;
+  /**
+   * A cinder landing is not the only landing worth hearing. Fired for every
+   * symbol as its column stops, with the column index, so the caller can play a
+   * reel-stop click that rises across the board.
+   */
+  onReelStop: ((col: number) => void) | null = null;
+
+  /**
+   * Free-running spin, started the instant the player presses the button and
+   * kept turning until the outcome arrives.
+   *
+   * The reference implementation (Stake Engine's own web SDK,
+   * `createReelForSpinning`) loops the reels in `preSpinSlideDownLoop` while
+   * `isPreSpinning`, i.e. WHILE THE SERVER REQUEST IS IN FLIGHT. Ours waited
+   * for the response and only then began to move, so every click was followed
+   * by 100-400ms of a completely still board on a real connection. That dead
+   * air is most of why the game does not feel like a game.
+   */
+  private free = { on: false, off: 0, v: 0, t: 0 };
+  /** One symbol-pitch per this many ms at full speed. */
+  private static readonly SPIN_MS_PER_SYMBOL = 42;
+  /** Wind-up: the strip lifts before it drops, like a lever being pulled. */
+  private static readonly WIND_MS = 120;
 
   constructor(cols: number, rows: number, cell: number, gap: number, gapX: number,
               getTexture?: TextureProvider, getWinLoop?: WinLoopProvider,
@@ -152,6 +175,7 @@ export class BoardView extends Container {
       this.spare.push(sp);
       this.symbolLayer.addChild(sp);
     }
+    this.wrapAt = Array.from({ length: cols }, () => new Array<number>(rows + 1).fill(0));
     this.buildPosts(w, h);
     this.addChild(this.posts, this.links);
   }
@@ -180,6 +204,92 @@ export class BoardView extends Container {
     for (let r = 0; r < this.rows; r++) out.push(this.at(r, c));
     return out;
   }
+
+  /**
+   * Start the reels NOW, with no outcome in hand.
+   *
+   * Returns immediately. `reveal` picks up from wherever the strip has got to,
+   * so the request latency is spent spinning instead of standing still.
+   */
+  beginSpin(reduced: boolean): void {
+    if (reduced || this.free.on) return;
+    this.free = { on: true, off: 0, v: 0, t: 0 };
+    for (let c = 0; c < this.cols; c++) {
+      for (const sp of this.strip(c)) { sp.visible = true; sp.alpha = 1; }
+    }
+  }
+
+  /** True while the reels are turning with no result yet. */
+  get spinning(): boolean { return this.free.on; }
+
+  /**
+   * Stop a free spin that will never receive an outcome — a refused bet, a
+   * network failure. The reels must not be left turning over a round that is
+   * not happening, and the board goes back to whatever it was showing.
+   */
+  abortSpin(): void {
+    if (!this.free.on) return;
+    this.free.on = false;
+    for (const sp of this.spare) { sp.visible = false; sp.setBlur(0); }
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const sp = this.at(r, c);
+        sp.setBlur(0); sp.scale.set(1); sp.alpha = 1;
+        const home = this.homeOf(r, c);
+        sp.x = home.x; sp.y = home.y;
+      }
+    }
+  }
+
+  private get pitch(): number { return this.cell + this.gap; }
+  private get turn(): number { return (this.rows + 1) * this.pitch; }
+  private get vMax(): number { return this.pitch / BoardView.SPIN_MS_PER_SYMBOL; }
+
+  /**
+   * One frame of the free spin: a short wind-UP, then acceleration to full
+   * speed, then a wrapping strip under motion blur.
+   */
+  private advanceFree(dt: number): void {
+    const f = this.free;
+    f.t += dt * 1000;
+    const W = BoardView.WIND_MS;
+    if (f.t < W) {
+      // the lever pulls back before it releases — the strip rises a little
+      const k = Math.sin((f.t / W) * Math.PI);
+      f.off = -this.pitch * 0.14 * k;
+      this.placeStrips(f.off, 0.15 * k, true);
+      return;
+    }
+    const ramp = Math.min(1, (f.t - W) / 170);
+    f.v = this.vMax * ramp;
+    f.off += f.v * dt * 1000;
+    this.placeStrips(f.off, ramp, true);
+  }
+
+  /**
+   * Lay every column's strip out at a shared offset. `randomise` re-faces a
+   * symbol as it wraps around the top, which is what makes a five-sprite strip
+   * read as an endless reel.
+   */
+  private placeStrips(off: number, blur: number, randomise: boolean): void {
+    const { rows, gap } = this;
+    const P = this.turn;
+    for (let c = 0; c < this.cols; c++) {
+      const st = this.strip(c);
+      for (let i = 0; i <= rows; i++) {
+        const pos = ((i * this.pitch + off) % P + P) % P;
+        if (randomise && pos < this.wrapAt[c][i]) {
+          st[i].setSymbol(BoardView.STRIP[(Math.random() * BoardView.STRIP.length) | 0]);
+        }
+        this.wrapAt[c][i] = pos;
+        st[i].y = gap + pos - this.pitch;
+        st[i].setBlur(blur);
+      }
+    }
+  }
+
+  /** Last wrap position per strip slot, so a wrap can be detected. */
+  private wrapAt: number[][] = [];
 
   /** Column dividers plus the rails that cap them. */
   private buildPosts(w: number, h: number): void {
@@ -237,6 +347,7 @@ export class BoardView extends Container {
   tickIdle(elapsed: number, reduced: boolean, dt = 0): void {
     for (const sp of this.cells) { sp.tickWin(dt); sp.tickSpecial(dt, reduced); }
     for (const sp of this.spare) sp.tickSpecial(dt, reduced);
+    if (this.free.on) { this.advanceFree(dt); return; }
     if (reduced) return;
     for (let i = 0; i < this.cells.length; i++) {
       const sp = this.cells[i];
@@ -280,44 +391,43 @@ export class BoardView extends Container {
    * fix, and the weakest devices would be the only ones still getting it.
    */
   async reveal(board: Board, ctx: AnimCtx, holdFrom = -1): Promise<void> {
-    if (ctx.reduced) { await this.briskReveal(board, ctx); return; }
+    if (ctx.reduced) { this.free.on = false; await this.briskReveal(board, ctx); return; }
 
-    const { cols, rows, cell, gap } = this;
-    const pitch = cell + gap;
-    const P = (rows + 1) * pitch;          // one full turn of the strip
+    const { cols, rows, gap } = this;
+    const pitch = this.pitch;
     const held = (c: number) => holdFrom >= 0 && c >= holdFrom;
 
-    // Timing. A column takes ~55ms to move one symbol past the window at full
-    // speed, which is about where a commercial reel sits: fast enough to smear,
-    // slow enough that the strip still reads as objects rather than as noise.
-    const V = pitch / 55;                  // px per ms
-    const ACC = 140;
-    const RUN = 240;
-    const STAGGER = 95;
-    const HOLD = 620;                      // extra run on an anticipating column
-    const STOP = 300;
-    const LEAD = pitch * 1.35;             // how far above home a column lands from
+    // Timings taken from the reference implementation and converted to our
+    // pitch: 145ms between reel stops, a 1.2-pitch run-in, a 0.3-pitch
+    // overshoot eased back, and an anticipated reel running roughly ten reel
+    // lengths further than a normal one rather than the half-second we had.
+    const STAGGER = 145;
+    const HOLD = 1500;
+    const STOP = 340;
+    const LEAD = pitch * 1.2;
+    const BOUNCE = pitch * 0.3;
+    // If the reels are already turning we owe the player no run-up; if this is
+    // a replay with no pre-spin (a resumed round) we still need a short one.
+    const warm = this.free.on;
+    const RUN = warm ? 120 : 320;
 
     const stopAt: number[] = [];
     let extra = 0;
     for (let c = 0; c < cols; c++) {
       if (held(c)) extra += HOLD;
-      stopAt.push(ACC + RUN + c * STAGGER + extra);
+      stopAt.push(RUN + c * STAGGER + extra);
     }
     const total = stopAt[cols - 1] + STOP;
 
-    // travelled distance at time t, integrating the ramp then the plateau
-    const dist = (t: number) => (t < ACC
-      ? (V * t * t) / (2 * ACC)
-      : (V * ACC) / 2 + V * (t - ACC));
-    const speed = (t: number) => (t < ACC ? (V * t) / ACC : V);
+    // carry on from wherever the free spin got to, at full speed
+    const startOff = this.free.off;
+    const v = this.vMax;
+    this.free.on = false;
 
-    const strips = Array.from({ length: cols }, (_, c) => this.strip(c));
-    const prev = strips.map(() => new Array<number>(rows + 1).fill(0));
     const landed = new Array<boolean>(cols).fill(false);
     let scatters = 0;
     for (let c = 0; c < cols; c++) {
-      for (const sp of strips[c]) { sp.visible = true; sp.alpha = 1; }
+      for (const sp of this.strip(c)) { sp.visible = true; sp.alpha = 1; }
     }
 
     await tween({
@@ -325,57 +435,65 @@ export class BoardView extends Container {
       onUpdate: (x) => {
         const now = x * total;
         for (let c = 0; c < cols; c++) {
-          const st = strips[c];
           if (now < stopAt[c]) {
-            const off = dist(now);
-            const blur = speed(now) / V;
+            const off = startOff + (warm ? v * now : v * now * Math.min(1, now / 200));
+            const P = this.turn;
+            const st = this.strip(c);
             for (let i = 0; i <= rows; i++) {
-              const pos = (i * pitch + off) % P;
-              // the strip wrapped past the bottom: this sprite is re-entering
-              // from the top, so give it a new face
-              if (pos < prev[c][i]) {
+              const pos = ((i * pitch + off) % P + P) % P;
+              if (pos < this.wrapAt[c][i]) {
                 st[i].setSymbol(BoardView.STRIP[
                   (Math.random() * BoardView.STRIP.length) | 0]);
               }
-              prev[c][i] = pos;
+              this.wrapAt[c][i] = pos;
               st[i].y = gap + pos - pitch;
-              st[i].setBlur(blur);
+              st[i].setBlur(warm ? 1 : Math.min(1, now / 200));
             }
-          } else {
-            // First frame past this column's stop time: the outcome goes on
-            // the strip, and from here the column is landing, not spinning.
-            if (!landed[c]) {
-              landed[c] = true;
-              this.spare[c].visible = false;
-              for (let r = 0; r < rows; r++) {
-                const sp = this.at(r, c);
-                sp.setSymbol(board[r]?.[c] ?? Sym.EMPTY);
-                // Each scatter is announced AS IT LANDS, while the reels to its
-                // right are still running. Announcing them all at the end would
-                // be a summary; announcing them one at a time is the build.
-                if (sp.sym === Sym.CINDER) {
-                  scatters++;
-                  sp.flash();
-                  const p = this.cellCenter(r, c);
-                  this.sparks?.(p.x, p.y, 14, 2.6, 0xffb347);
-                  this.onScatter?.(scatters);
-                }
-              }
-            }
-            const p = Math.min(1, (now - stopAt[c]) / STOP);
-            const k = LEAD * (1 - easeOutBack(p));
+            continue;
+          }
+          // First frame past this column's stop time: the outcome goes on the
+          // strip, and from here the column is landing, not spinning.
+          if (!landed[c]) {
+            landed[c] = true;
+            this.spare[c].visible = false;
+            this.onReelStop?.(c);
             for (let r = 0; r < rows; r++) {
               const sp = this.at(r, c);
-              sp.y = gap + r * pitch + k;
-              sp.setBlur((1 - p) * 0.55);
+              sp.setSymbol(board[r]?.[c] ?? Sym.EMPTY);
+              // Each cinder is announced AS IT LANDS, while the reels to its
+              // right are still running. Announcing them all at the end would
+              // be a summary; one at a time is the build.
+              if (sp.sym === Sym.CINDER) {
+                scatters++;
+                sp.flash();
+                const p = this.cellCenter(r, c);
+                this.sparks?.(p.x, p.y, 14, 2.6, 0xffb347);
+                this.onScatter?.(scatters);
+              }
             }
+          }
+          // Two-stage stop, as the reference does it: run in to an overshoot,
+          // then ease back up to home. A single ease-out lands flat; the
+          // overshoot plus the slow return is what gives a reel its weight.
+          const p = Math.min(1, (now - stopAt[c]) / STOP);
+          let k: number;
+          if (p < 0.55) {
+            k = BOUNCE + LEAD * (1 - easeOutCubic(p / 0.55));
+          } else {
+            const q = (p - 0.55) / 0.45;
+            k = BOUNCE * (1 - Math.sin((q * Math.PI) / 2));
+          }
+          for (let r = 0; r < rows; r++) {
+            const sp = this.at(r, c);
+            sp.y = gap + r * pitch + k;
+            sp.setBlur(p < 0.55 ? (1 - p / 0.55) * 0.5 : 0);
           }
         }
       },
     });
 
-    // Unconditional: a skip resolves the tween early, and a column left mid-flight
-    // would keep a stretched scale and a stale symbol for the rest of the round.
+    // Unconditional: a skip resolves the tween early, and a column left
+    // mid-flight would keep a stretched scale and a stale symbol all round.
     this.settleStrips(board);
     // the bottom row carries the impact; bending all thirty would be noise
     await Promise.all(

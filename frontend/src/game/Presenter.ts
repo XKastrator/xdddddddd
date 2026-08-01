@@ -11,6 +11,16 @@ import type {
 } from '../types/events';
 
 export interface Presenter {
+  /**
+   * Optional: start the reels before the outcome is known.
+   *
+   * The bet request has latency, and a still board during it is dead air the
+   * player reads as the game being slow. Presenters that cannot spin ahead
+   * simply do not implement this.
+   */
+  beginSpin?(): void;
+  /** Stop a `beginSpin` that will never receive an outcome. */
+  abortSpin?(): void;
   revealBoard(board: Board, heat: number, kind: SpinKind, scatters: number): Promise<void>;
   anticipation(scatters: number, needed: number): Promise<void>;
   forge(fusions: Fusion[], heat: number): Promise<void>;
