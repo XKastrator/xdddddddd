@@ -18,7 +18,7 @@ import { Particles } from './Particles';
 import { CoinShower, shake } from './juice';
 import { HeatHazeFilter, ShimmerFilter, ChromaticFilter } from './filters';
 import { Background, type SceneTextures } from './Background';
-import { ReelFrame, BAND } from './ReelFrame';
+import { ReelFrame, BAND_FRAC } from './ReelFrame';
 import { Smith } from './Smith';
 import { Toast } from './Toast';
 import { Camera } from './Camera';
@@ -39,6 +39,12 @@ export interface PresenterAssets {
 }
 
 const COLS = 6, ROWS = 5, BASE_CELL = 96, BASE_GAP = 8;
+/**
+ * Housing thickness in BOARD-LOCAL units. The world container is scaled by
+ * `cell / BASE_CELL`, so a constant here is a constant fraction of the cell on
+ * screen — which is exactly what `computeLayout` reserves for it.
+ */
+const BASE_BAND = Math.round(BASE_CELL * BAND_FRAC);
 const HEAT_CAP: Record<SpinKind, number> = { base: 25, free: 100, super: 10 };
 
 export class PixiPresenter implements Presenter {
@@ -96,11 +102,11 @@ export class PixiPresenter implements Presenter {
     }
     this.banner = new WinBanner(assets.font ?? null);
     this.toastView = new Toast(assets.font ?? null);
+    // The gauge is MACHINED INTO the cabinet's bottom rail — see
+    // `ReelFrame.gaugeSlot`. Below the housing it read as a stray progress bar
+    // that happened to be near the game, and it cost the grid a 6% strip of
+    // stage height for the privilege.
     this.heatMeter = new HeatMeter(this.board.width2, 14, assets.font ?? null);
-    // The gauge moved BELOW the grid: the band above the board now carries the
-    // frame's cartouche, and stacking both there made the two fight for the same
-    // 30 units. Board-local, so this constant holds at every layout.
-    this.heatMeter.position.set(0, this.board.height2 + BASE_GAP * BAND + 14);
     // The housing lives in the same scaled container as the grid and is drawn
     // in board-local coordinates, so it tracks every layout for free.
     this.cam = new Camera(this.world);
@@ -130,13 +136,22 @@ export class PixiPresenter implements Presenter {
     // Heat haze distorts the room; shimmer sweeps the grid; chromatic
     // aberration is an impact accent on the whole stage. They are attached
     // ON DEMAND — see `syncFilters`.
-    app.stage.addChild(this.bg, this.smithHolder, this.world, this.coins, this.hud);
+    // The corner HUD is GONE. It printed BASE / TOTAL / WIN in the two top
+    // corners in a thin face — every one of those numbers is already in the
+    // control bar, so all it did was read as a debug overlay and steal 14% of
+    // the stage height from the board. The band it occupied now belongs to the
+    // grid, which is the thing the player is actually looking at.
+    app.stage.addChild(this.bg, this.smithHolder, this.world, this.coins);
+    this.hud.visible = false;
     if (this.logo) app.stage.addChild(this.logo);
     if (this.panel) app.stage.addChild(this.panel);
     app.stage.addChild(this.banner, this.toastView);
 
-    this.frame.layout(this.board.width2, this.board.height2, BASE_GAP);
+    this.frame.layout(this.board.width2, this.board.height2, BASE_GAP, BASE_BAND);
     this.frame.setTitle('THE DEEPFORGE');
+    const slot = this.frame.gaugeSlot();
+    this.heatMeter.position.set(slot.x, slot.y);
+    this.heatMeter.layout(slot.w, slot.h);
 
     // NOTE: no pointer parallax. Tying the room to the cursor made the whole
     // scene twitch under every mouse move — distracting during play, and it
@@ -200,11 +215,28 @@ export class PixiPresenter implements Presenter {
     }
   }
 
-  /** Fill the grid with ore before the first spin so the game never looks empty. */
+  /**
+   * The attract board — what the player sees before the first spin, and what a
+   * lobby thumbnail captures.
+   *
+   * This used to be thirty ore cells. Every low symbol in this game is the same
+   * silhouette in a different hue, so a grid of nothing but ore read as a
+   * match-three puzzle rather than as a forge slot: no relics, no wild, no
+   * scatter, none of the artwork the game is actually about. It is now
+   * AUTHORED — a fixed arrangement that shows the range of the set and puts the
+   * crown near the middle — because the one frame guaranteed to be seen is the
+   * one worth composing by hand. It is presentation only; the first real board
+   * replaces it and no outcome is implied.
+   */
   showIdleBoard(): void {
-    const ores = [Sym.O1, Sym.O2, Sym.O3, Sym.O4, Sym.O5];
-    const board: Board = Array.from({ length: ROWS }, (_, r) =>
-      Array.from({ length: COLS }, (_, c) => ores[(r * COLS + c * 3 + r * 2) % ores.length]));
+    const { O1: a, O2: b, O3: c, O4: d, O5: e } = Sym;
+    const board: Board = [
+      [a, Sym.IRON, c, Sym.GOLD, b, e],
+      [Sym.BRONZE, d, Sym.CROWN, a, Sym.SILVER, c],
+      [b, e, Sym.FLUX, Sym.MYTHRIL, d, Sym.BRONZE],
+      [Sym.SILVER, c, a, e, Sym.CINDER, b],
+      [d, Sym.GOLD, b, Sym.IRON, a, d],
+    ];
     this.board.setBoard(board);
     this.lblTotal.text = 'TOTAL 0.00×';
     this.lblSpinWin.text = 'WIN 0.00×';
@@ -246,9 +278,9 @@ export class PixiPresenter implements Presenter {
     // not buried behind the control bar
     this.bg.resize(w, playH, h);
 
-    // the housing and the gauge below it are drawn outside the board rect, so
-    // the layout has to buy that space back out of the available area
-    const lay = computeLayout(w, playH, COLS, ROWS, BAND + 1.5);
+    // the housing is drawn outside the board rect, so the layout has to buy
+    // that space back out of the available area
+    const lay = computeLayout(w, playH, COLS, ROWS, BAND_FRAC);
     const scale = lay.cell / BASE_CELL;
     // Layout decides the framing; the camera adds to it every frame.
     this.cam.setBase(scale, lay.boardX, lay.boardY,
@@ -266,7 +298,7 @@ export class PixiPresenter implements Presenter {
     this.banner.resize(w, playH);
     this.toastView.resize(w, playH);
     this.placeSmith(w, playH, lay.boardX, lay.boardY, lay.boardH);
-    this.placeLogo(w, playH, lay.boardY);
+    this.placeLogo(w, lay.boardY);
   }
 
   /**
@@ -275,16 +307,23 @@ export class PixiPresenter implements Presenter {
    * when the board has crowded that band out — a clipped logo is worse than no
    * logo.
    */
-  private placeLogo(w: number, h: number, boardY: number): void {
+  private placeLogo(w: number, boardY: number): void {
     if (!this.logo) return;
     const tex = this.logo.texture;
-    const room = boardY - BAND * 1.6 * (this.world.scale.x * BASE_GAP) - 6;
-    const maxH = Math.min(room * 0.82, h * 0.13, 104);
-    if (maxH < 26) { this.logo.visible = false; return; }
+    // everything above the cartouche, which itself sits above the housing
+    const scale = this.world.scale.x;
+    // everything above the cartouche, which itself sits above the housing
+    const room = boardY - (BASE_BAND * 1.9) * scale;
+    const pad = 6;
+    const maxH = room - pad * 2;
+    if (maxH < 22) { this.logo.visible = false; return; }
     this.logo.visible = true;
-    const s = Math.min(maxH / tex.height, (w * 0.5) / tex.width);
+    // Fit INSIDE the band on both axes. Sizing off stage height instead let the
+    // wordmark grow past the room it had and get guillotined by the stage edge —
+    // a clipped logo is worse than a small one.
+    const s = Math.min(maxH / tex.height, (w * 0.42) / tex.width);
     this.logo.scale.set(s);
-    this.logo.position.set(w / 2, Math.max(2, (room - tex.height * s) / 2));
+    this.logo.position.set(w / 2, pad + (maxH - tex.height * s) / 2);
   }
 
   /**
@@ -306,7 +345,9 @@ export class PixiPresenter implements Presenter {
     // area and only fall back to the gutter width when that is the tighter
     // constraint, so he stays substantial on wide screens.
     const byHeight = (h * 0.66) / this.smith.artHeight;
-    const byWidth = (sideRoom * 0.94) / this.smith.artWidth;
+    // He is scenery, not the subject. At 0.94 of the side room he was as tall
+    // as the grid and pulled the eye off it every frame.
+    const byWidth = (sideRoom * 0.66) / this.smith.artWidth;
     this.smith.scale.set(Math.min(byHeight, byWidth));
     // anchored at the feet, so this is where he STANDS: on the foreground ledge,
     // a little below the board's bottom line

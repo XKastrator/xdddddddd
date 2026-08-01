@@ -79,9 +79,16 @@ G: dict[str, list[list[tuple[float, float]]]] = {
     "+": [[(3, 2.6), (3, 8.2)], [(1.2, 5.4), (4.8, 5.4)]],
     "-": [[(1.2, 5.4), (4.8, 5.4)]],
     "/": [[(1.2, 9.4), (4.8, 1)]],
-    ":": [[(3, 3.2), (3, 3.3)], [(3, 7.4), (3, 7.5)]],
-    ".": [[(3, 9.3), (3, 9.4)]],
-    ",": [[(3.1, 9.2), (2.5, 10.4)]],
+    # Punctuation is CENTRED IN ITS OWN ADVANCE, not in the 6-unit design grid.
+    # These used to be drawn at x=3 like a full-width letter while advancing only
+    # 2.2 units, so a period landed on top of the digit that followed it and the
+    # decimal point in "1000.00" was effectively invisible — a money readout with
+    # no decimal separator. The ink now sits at bearing + advance/2.
+    ":": [[(2.2, 3.2), (2.2, 3.3)], [(2.2, 7.4), (2.2, 7.5)]],
+    # a short capsule rather than a zero-length dot: at a 26px cap the dot was
+    # 4px across and dissolved into the bevel
+    ".": [[(2.05, 9.15), (2.35, 9.15)]],
+    ",": [[(2.35, 9.05), (1.85, 10.25)]],
     "%": [[(1.6, 2.2), (1.7, 2.3)], [(4.4, 8.4), (4.5, 8.5)], [(4.8, 1.6), (1.4, 9.2)]],
     "!": [[(3, 1), (3, 6.8)], [(3, 9.2), (3, 9.3)]],
     "?": [[(1.4, 2.4), (3, 1), (4.8, 2.4), (4.6, 4.4), (3, 5.6), (3, 6.8)], [(3, 9.2), (3, 9.3)]],
@@ -93,7 +100,7 @@ G: dict[str, list[list[tuple[float, float]]]] = {
 
 # glyphs that must share one advance so counters do not jitter while counting
 TABULAR = set("0123456789.,")
-NARROW = {"I": 0.62, "J": 0.82, "1": 1.0, ".": 0.42, ",": 0.42, ":": 0.42,
+NARROW = {"I": 0.62, "J": 0.82, "1": 1.0, ".": 0.54, ",": 0.54, ":": 0.54,
           "!": 0.46, "'": 0.4, "-": 0.8, "/": 0.78, "<": 0.82, ">": 0.82}
 WIDE = {"M": 1.14, "W": 1.2, "%": 1.1}
 
@@ -102,7 +109,7 @@ def advance(ch: str) -> float:
     """Advance width in grid units (ink spans ~0.8..5.2, so 5.2 leaves a
     natural sidebearing without the letters touching)."""
     if ch in TABULAR:
-        return 5.2 if ch not in (".", ",") else 2.2
+        return 5.2 if ch not in (".", ",") else 2.8
     return 5.2 * NARROW.get(ch, WIDE.get(ch, 1.0))
 
 

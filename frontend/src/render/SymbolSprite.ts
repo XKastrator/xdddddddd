@@ -6,6 +6,7 @@
  * runs (and stays testable) without any binary assets present.
  */
 import { Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
+import { Deform } from './Deform';
 import { Sym } from '../types/events';
 import { symStyle } from './palette';
 
@@ -14,7 +15,13 @@ export type TextureProvider = (sym: Sym) => Texture | undefined;
 export type WinLoopProvider = (sym: Sym) => Texture[] | undefined;
 
 /** How much of the cell the authored artwork occupies (glow needs headroom). */
-const ART_FILL = 1.04;
+/**
+ * The artwork is drawn inside a padded 256 box, so this oversizes it to fill
+ * the cell. At 1.04 every symbol sat in a visible black moat and the grid read
+ * as icons in boxes rather than as a slot; the padding in the source art is
+ * roughly 12%, so this cancels it.
+ */
+const ART_FILL = 1.22;
 
 export class SymbolSprite extends Container {
   private glow = new Graphics();
@@ -27,6 +34,18 @@ export class SymbolSprite extends Container {
   /** Frames of the win loop while one is playing; null the rest of the time. */
   private loop: Texture[] | null = null;
   private loopT = 0;
+  /**
+   * Mesh stand-in for the art sprite, created on first impact and reused.
+   *
+   * A mesh is its own draw call where thirty sprites batch into one or two, so
+   * this is NOT the resting representation: the sprite draws until something
+   * hits the symbol, the mesh takes over for the ~400ms the bend lasts, and the
+   * sprite comes back. Only the handful of cells actually being struck ever pay
+   * for it, which matters on the devices the frame-rate guard exists for.
+   */
+  private deform: Deform | null = null;
+  /** True when the atlas supplied artwork — the procedural path has none. */
+  private hasArt = false;
 
   constructor(size: number, private getTexture?: TextureProvider,
               private getWinLoop?: WinLoopProvider) {
@@ -54,12 +73,46 @@ export class SymbolSprite extends Container {
   }
 
   /**
+   * Hit this symbol so the ARTWORK bends — squash on the impact axis, bulge on
+   * the other, a decaying ring, then a spring back to rest.
+   *
+   * Returns false when there is nothing to bend (no atlas artwork), so the
+   * caller can fall back to scaling the whole cell instead.
+   */
+  strike(power: number, vertical = true): boolean {
+    if (!this.hasArt) return false;
+    const tex = this.art.texture;
+    if (!tex || tex === Texture.EMPTY) return false;
+    if (!this.deform) {
+      this.deform = new Deform(tex);
+      // directly above the sprite it replaces, below the label
+      this.addChildAt(this.deform.mesh, this.getChildIndex(this.art) + 1);
+    } else {
+      this.deform.setTexture(tex);
+    }
+    this.deform.setSize(this.size * ART_FILL);
+    this.deform.mesh.position.set(this.size / 2, this.size / 2);
+    this.deform.mesh.visible = true;
+    this.art.visible = false;
+    this.deform.strike(power, vertical);
+    return true;
+  }
+
+  /** Put the sprite back and drop any residual bend. */
+  private endDeform(): void {
+    if (!this.deform) return;
+    this.deform.reset();
+    this.deform.mesh.visible = false;
+    if (this.hasArt) this.art.visible = true;
+  }
+
+  /**
    * Idle life, driven by the board's ticker. Applied to the ART sprite only, so
    * it never fights the tweens that animate the sprite container itself
    * (forge pull-in, squash, celebrate pulse all move `this`).
    */
   setIdle(scale: number, glowAlpha: number): void {
-    if (!this.art.visible) return;
+    if (!this.hasArt) return;
     const base = this.size * ART_FILL;
     this.art.width = this.art.height = base * scale;
     this.glow.alpha = glowAlpha;
@@ -82,8 +135,15 @@ export class SymbolSprite extends Container {
     }
   }
 
-  /** Advance the win loop. Driven by the board's ticker; no-op when idle. */
+  /**
+   * Per-frame work for this cell: the mesh bend, then the win loop. Driven by
+   * the board's ticker; both branches are no-ops when nothing is running.
+   */
   tickWin(dt: number): boolean {
+    if (this.deform && this.deform.mesh.visible) {
+      this.deform.update(dt);
+      if (!this.deform.active) this.endDeform();
+    }
     if (!this.loop) return false;
     this.loopT += dt;
     const fps = 18;
@@ -93,6 +153,8 @@ export class SymbolSprite extends Container {
 
   setSymbol(sym: Sym): void {
     this.loop = null;
+    // a cell being repainted must not keep the previous symbol's bend
+    this.endDeform();
     this.sym = sym;
     const tex = sym === Sym.EMPTY ? undefined : this.getTexture?.(sym);
     if (tex) { this.drawFromAtlas(tex); return; }
@@ -115,6 +177,7 @@ export class SymbolSprite extends Container {
     this.glow.alpha = 1;
     this.tile.clear();
     this.txt.text = '';
+    this.hasArt = true;
     this.art.visible = true;
     this.art.texture = tex;
     this.art.width = this.art.height = s * ART_FILL;
@@ -122,6 +185,7 @@ export class SymbolSprite extends Container {
 
   /** Fallback: procedural shapes (no binary assets required). */
   private drawProcedural(sym: Sym): void {
+    this.hasArt = false;
     this.art.visible = false;
     const s = this.size;
     const st = symStyle(sym);

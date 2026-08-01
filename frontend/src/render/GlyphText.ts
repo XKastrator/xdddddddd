@@ -96,6 +96,21 @@ export class GlyphText extends Container {
     for (const s of this.sprites) s.tint = tint;
   }
 
+  /**
+   * Cap height in px. Needed because several captions are sized off a rail or
+   * a button that only exists after a layout pass, not off a constant.
+   */
+  setSize(px: number): void {
+    if (px === this.opts.size) return;
+    this.opts.size = px;
+    if (this.fallback) {
+      this.fallback.style.fontSize = Math.round(px * 1.15);
+      this.contentWidth = this.fallback.width;
+      return;
+    }
+    this.layout();
+  }
+
   private acquire(): Sprite {
     const s = this.pool.pop() ?? new Sprite();
     s.visible = true;

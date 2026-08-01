@@ -3,13 +3,12 @@
  * (reveal, forge pulse + product placement, gravity drop). It renders the state
  * carried by events; it never decides outcomes.
  */
-import { Container, Graphics } from 'pixi.js';
+import { Container, FillGradient, Graphics } from 'pixi.js';
 import type { Board, Fusion, Spawned } from '../types/events';
 import { Sym } from '../types/events';
 import { SymbolSprite, type TextureProvider, type WinLoopProvider } from './SymbolSprite';
-import { tween, easeOutBack, easeOutCubic } from './tween';
+import { tween, wait, easeOutBack, easeOutCubic } from './tween';
 import { squash, pulse } from './juice';
-import { THEME } from './palette';
 
 export interface AnimCtx { shouldSkip: () => boolean; reduced: boolean; }
 
@@ -38,27 +37,55 @@ export class BoardView extends Container {
     this.cols = cols; this.rows = rows; this.cell = cell; this.gap = gap;
     const w = cols * cell + (cols + 1) * gap;
     const h = rows * cell + (rows + 1) * gap;
-    // translucent: the painted room behind the grid is part of the composition
-    this.bg.roundRect(0, 0, w, h, gap * 1.6).fill({ color: 0x05070c, alpha: 0.35 });
-    // Per-cell wells. Without them the recess is one flat rectangle and the
+    // The reel window is LIT, not translucent.
+    //
+    // It used to be a 35%-alpha black rectangle on the theory that the painted
+    // room behind the grid was part of the composition. On screen it was not:
+    // the room was already dark there, so the whole board resolved to one flat
+    // near-black slab with no direction and no depth, and the symbols read as
+    // stickers on a rectangle. The window now has its own light — cold at the
+    // top, warm at the bottom, because the forge is below and the room is above
+    // — which is the same light the symbol artwork is painted under.
+    this.bg.roundRect(0, 0, w, h, gap * 2)
+      .fill(new FillGradient({
+        type: 'linear',
+        start: { x: 0, y: 0 }, end: { x: 0, y: 1 },
+        colorStops: [
+          { offset: 0, color: 0x0a1018 },
+          { offset: 0.55, color: 0x0d0f14 },
+          { offset: 1, color: 0x1c1109 },
+        ],
+        textureSpace: 'local',
+      }));
+    // Per-cell sockets. Without them the recess is one flat rectangle and the
     // symbols read as stickers floating on a panel; a shallow inset behind each
     // one gives the grid structure and makes a gap in a fused group visible.
-    const r = gap * 1.1;
+    // Everything here scales with CELL, not with the gutter: the gutter is now
+    // hairline-thin by design and ornament tied to it disappeared with it.
+    const r = Math.max(3, cell * 0.09);
+    const line = Math.max(1, cell * 0.012);
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
         const x = gap + col * (cell + gap);
         const y = gap + row * (cell + gap);
-        this.bg.roundRect(x, y, cell, cell, r).fill({ color: 0x0b1018, alpha: 0.55 });
-        // light catches the top lip, shadow gathers along the bottom
-        this.bg.roundRect(x, y, cell, cell * 0.5, r)
-          .fill({ color: 0xffffff, alpha: 0.022 });
-        this.bg.roundRect(x + 0.5, y + 0.5, cell - 1, cell - 1, r)
-          .stroke({ width: 1, color: 0x000000, alpha: 0.4 });
-        this.bg.moveTo(x + r, y + 0.5).lineTo(x + cell - r, y + 0.5)
-          .stroke({ width: 1, color: 0x7b8ea6, alpha: 0.22 });
+        // the socket floor, dark enough that a lit symbol has something to be
+        // lit against
+        this.bg.roundRect(x, y, cell, cell, r).fill({ color: 0x080c13, alpha: 0.62 });
+        // light from above spills down the inside of the socket and dies out
+        this.bg.roundRect(x, y, cell, cell * 0.46, r)
+          .fill({ color: 0x8ba4c4, alpha: 0.055 });
+        // and pools as shadow where the socket floor meets its far wall
+        this.bg.roundRect(x, y + cell * 0.62, cell, cell * 0.38, r)
+          .fill({ color: 0x000000, alpha: 0.24 });
+        // the cut itself: a dark groove with a bright lip on the near edge
+        this.bg.roundRect(x, y, cell, cell, r)
+          .stroke({ width: line * 1.6, color: 0x000000, alpha: 0.62 });
+        this.bg.moveTo(x + r, y + line).lineTo(x + cell - r, y + line)
+          .stroke({ width: line, color: 0xa8bcd6, alpha: 0.34 });
+        this.bg.moveTo(x + r, y + cell - line).lineTo(x + cell - r, y + cell - line)
+          .stroke({ width: line, color: 0xffb457, alpha: 0.10 });
       }
     }
-    this.bg.roundRect(0, 0, w, h, gap * 1.6).stroke({ width: 2, color: THEME.line });
     this.addChild(this.bg);
     this.clip.roundRect(gap * 0.4, gap * 0.4, w - gap * 0.8, h - gap * 0.8, gap * 1.4)
       .fill({ color: 0xffffff });
@@ -188,7 +215,29 @@ export class BoardView extends Container {
     if (brisk) return;
     await Promise.all(
       Array.from({ length: this.cols }, (_, c) => this.at(this.rows - 1, c))
-        .map((sp) => squash(sp, 0.16, 170, ctx)));
+        .map((sp) => this.land(sp, 0.5, ctx)));
+  }
+
+  /**
+   * A symbol arriving: bend the ARTWORK if it can be bent, otherwise scale the
+   * whole cell.
+   *
+   * The scale tween was the only landing we had, and a picture that gets
+   * briefly shorter is not the same as an object with mass hitting a surface —
+   * it is the tell that separates our symbols from a studio's. A mesh bend
+   * compresses along the impact axis, bulges across it and rings out, which is
+   * what a Spine rig does to a single-piece symbol. Where there is no artwork
+   * to bend (the procedural fallback) the old squash still runs, so nothing
+   * regresses when assets are missing.
+   */
+  private async land(sp: SymbolSprite, power: number, ctx: AnimCtx): Promise<void> {
+    if (ctx.reduced) return;
+    if (sp.strike(power)) {
+      // the bend runs on the ticker; hold the beat, not the whole settle
+      await wait(170, ctx.shouldSkip, ctx.reduced);
+      return;
+    }
+    await squash(sp, 0.16, 170, ctx);
   }
 
   /**
@@ -359,7 +408,8 @@ export class BoardView extends Container {
       shouldSkip: ctx.shouldSkip,
       onUpdate: (t) => { for (const sp of anchors) sp.scale.set(0.2 + 0.8 * t); },
     });
-    await Promise.all(anchors.map((sp) => squash(sp, 0.18, 200, ctx)));
+    // the product is struck hardest — this is the hammer blow of the round
+    await Promise.all(anchors.map((sp) => this.land(sp, 0.85, ctx)));
   }
 
   /** Celebrate the relics that paid, so a win is legible on the board itself. */
@@ -401,6 +451,6 @@ export class BoardView extends Container {
       },
     });
     for (const e of byCell) { e.sp.y = e.homeY; }
-    await Promise.all(byCell.slice(0, 8).map((e) => squash(e.sp, 0.14, 160, ctx)));
+    await Promise.all(byCell.slice(0, 8).map((e) => this.land(e.sp, 0.42, ctx)));
   }
 }

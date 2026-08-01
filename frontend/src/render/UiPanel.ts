@@ -371,22 +371,44 @@ class SpinButton extends Control {
   }
 }
 
+/**
+ * A caption over a value — BALANCE, WIN, BET.
+ *
+ * These were 8px captions over 13px values, which on a 1366-wide bar read as a
+ * legend printed in the corner rather than as the player's money. The balance
+ * is the number a player checks most often in a session and it has to be among
+ * the most legible text on screen. Sizes are set by `resize` from the bar's own
+ * height, so one class serves the desktop strip and the portrait stack without
+ * a second layout path.
+ */
 class Readout extends Container {
   private caption: GlyphText;
   private value: GlyphText;
-  constructor(font: GlyphFont | null, caption: string, tint: number,
+  private gapY = 24;
+  constructor(font: GlyphFont | null, caption: string, private baseTint: number,
               private align: 'left' | 'center' | 'right') {
     super();
-    this.caption = new GlyphText(font, { size: 8, tint: THEME.dim, letterSpacing: 2.2, align });
-    this.value = new GlyphText(font, { size: 13, tint, letterSpacing: 1, align });
+    this.caption = new GlyphText(font, { size: 10, tint: THEME.dim, letterSpacing: 2.4, align });
+    this.value = new GlyphText(font, { size: 22, tint: baseTint, letterSpacing: 1, align });
     this.caption.text = caption;
     this.value.text = '—';
-    this.caption.position.set(0, 0);
-    this.value.position.set(0, 20);
     this.addChild(this.caption, this.value);
+    this.resize(10, 22);
   }
+  /** Cap heights, in px. The glyph face draws UP from its baseline. */
+  resize(capSize: number, valueSize: number): void {
+    this.caption.setSize(capSize);
+    this.value.setSize(valueSize);
+    this.gapY = Math.round(capSize + valueSize * 0.85);
+    this.caption.position.set(0, 0);
+    this.value.position.set(0, this.gapY);
+  }
+  /** Total ink height, so a caller can centre the pair on a rail. */
+  get height2(): number { return this.gapY; }
   setCaption(t: string): void { this.caption.text = t; }
   set(v: string): void { this.value.text = v; }
+  /** Highlight a live value — a win of zero is not news, a win of 12.40 is. */
+  setHot(on: boolean): void { this.value.setTint(on ? THEME.gold : this.baseTint); }
   get width2(): number { return Math.max(this.caption.contentWidth, this.value.contentWidth); }
   get alignment(): 'left' | 'center' | 'right' { return this.align; }
 }
@@ -409,6 +431,18 @@ export class UiPanel extends Container {
   private stepper: ChevronStack;
   private bonus: BonusButton;
   private h = 0;
+  /**
+   * Last stage size, kept so a value change can re-run the layout.
+   *
+   * The readouts are spaced by their MEASURED width, and at layout time they
+   * still hold the placeholder — so the spacing was computed for `—` and the
+   * real numbers ran into each other and into the autoplay button. Values
+   * change a handful of times per round, and the bar is a dozen fills, so
+   * re-flowing on change is cheaper than guessing a slot wide enough for every
+   * currency.
+   */
+  private lastW = 0;
+  private lastH = 0;
   private autoRemaining: number | null = null;
   private autoAllowed = true;
   /** A round is playing — the primary button acts as SKIP. */
@@ -455,10 +489,19 @@ export class UiPanel extends Container {
 
   get height2(): number { return this.h; }
 
-  setBalance(v: string): void { this.balReadout.set(v); }
+  setBalance(v: string): void { this.balReadout.set(v); this.reflow(); }
+
+  /** Re-run the last layout so measured-width spacing stays correct. */
+  private reflow(): void {
+    if (this.lastW > 0) this.layout(this.lastW, this.lastH);
+  }
   /** Round win, shown beside the balance the way the reference bars do. */
-  setWin(v: string): void { this.winReadout.set(v); }
-  setBet(v: string): void { this.betReadout.set(v); }
+  setWin(v: string): void {
+    this.winReadout.set(v);
+    this.winReadout.setHot(/[1-9]/.test(v));
+    this.reflow();
+  }
+  setBet(v: string): void { this.betReadout.set(v); this.reflow(); }
   setMode(v: string): void { this.modeLabel.text = v; }
   setSpinEnabled(v: boolean): void {
     this.busy = !v;
@@ -523,13 +566,14 @@ export class UiPanel extends Container {
 
   /** Lay the bar out for the given stage size. Returns the height it occupies. */
   layout(w: number, h: number): number {
+    this.lastW = w; this.lastH = h;
     const compact = w < 900;
     // Portrait stacks three rows — readouts, mode selector, actions — and the
     // action row is a 34px-radius circle, so it needs 68px of its own before any
     // padding. 158 was not enough and the mode label landed inside the button.
     // Wide is one strip now that the mode selector is gone, so it needs far
     // less height — and every pixel it gives back goes to the board.
-    const barH = compact ? 158 : 76;
+    const barH = compact ? 168 : 92;
     this.h = barH;
     this.position.set(0, h - barH);
 
@@ -566,38 +610,64 @@ export class UiPanel extends Container {
    */
   private layoutWide(w: number, barH: number, pad: number): void {
     const mid = barH / 2;
+    // caption + value sizes, and the baseline offset that centres the pair
+    const capS = 11, valS = Math.round(Math.min(26, barH * 0.28));
 
     // --- left cluster: the two controls that change nothing about the bet ---
-    let x = pad + 24;
-    this.turbo.setRadius(24); this.turbo.position.set(x, mid);
-    x += 58;
-    this.menu.setRadius(22); this.menu.visible = true; this.menu.position.set(x, mid);
+    let x = pad + 26;
+    this.turbo.setRadius(26); this.turbo.position.set(x, mid);
+    x += 62;
+    this.menu.setRadius(24); this.menu.visible = true; this.menu.position.set(x, mid);
+    const leftEnd = x + 24;
 
-    // --- money readouts, as one group ---------------------------------------
-    x += 44;
-    const readTop = mid - 15;
-    for (const ro of [this.balReadout, this.winReadout, this.betReadout]) {
+    // --- what the player HAS, on the left ------------------------------------
+    x = leftEnd + 34;
+    this.balReadout.resize(capS, valS);
+    this.winReadout.resize(capS, valS);
+    this.betReadout.resize(capS, valS);
+    const readTop = mid - this.balReadout.height2 / 2;
+    for (const ro of [this.balReadout, this.winReadout]) {
       ro.position.set(x, readTop);
-      x += Math.max(82, ro.width2 + 38);
+      x += Math.max(valS * 5.4, ro.width2 + valS * 1.9);
     }
-    // the stepper belongs to BET, so it sits immediately after it
-    this.stepper.setSize(13);
-    this.stepper.position.set(x - 22, mid);
+    const moneyEnd = x - valS * 1.9;
 
     // --- right cluster, laid out from the edge inwards -----------------------
-    const bonusR = Math.min(34, barH / 2 - 4);
+    // BET travels with the actions rather than sitting with the balance: it is
+    // the number the player changes right before pressing the button, and
+    // parking it 900px away left the middle of a wide bar visibly empty while
+    // both ends were crowded.
+    const bonusR = Math.min(38, barH / 2 - 6);
     this.bonus.setRadius(bonusR);
     this.bonus.position.set(w - pad - bonusR, mid);
-    const spinR = Math.min(34, barH / 2 - 4);
+    const spinR = Math.min(40, barH / 2 - 4);
     this.spin.setRadius(spinR);
-    const spinX = w - pad - bonusR * 2 - 20 - spinR;
+    const spinX = w - pad - bonusR * 2 - 24 - spinR;
     this.spin.position.set(spinX, mid);
 
     // Help lives behind the hamburger and skip is the primary button while a
     // round runs, so neither needs a circle of its own.
     this.skip.visible = false; this.help.visible = false;
-    this.auto.setRadius(24);
-    this.auto.position.set(spinX - spinR - 22 - 24, mid);
+    this.auto.setRadius(25);
+    const autoX = spinX - spinR - 26 - 25;
+    this.auto.position.set(autoX, mid);
+
+    this.stepper.setSize(14);
+    const stepX = autoX - 25 - 30;
+    this.stepper.position.set(stepX, mid);
+    this.betReadout.position.set(stepX - 26 - this.betReadout.width2, readTop);
+
+    // --- hairlines between the three clusters --------------------------------
+    // An empty stretch of bar reads as unfinished; the same stretch between two
+    // rules reads as spacing. Both are drawn only where a real gap exists.
+    const rule = (rx: number) => {
+      if (rx < pad || rx > w - pad) return;
+      this.bar.moveTo(rx, mid - barH * 0.24).lineTo(rx, mid + barH * 0.24)
+        .stroke({ width: 1, color: 0xffffff, alpha: 0.12 });
+    };
+    rule(Math.round((leftEnd + (leftEnd + 34)) / 2));
+    const betLeft = stepX - 26 - this.betReadout.width2;
+    if (betLeft - moneyEnd > 90) rule(Math.round((moneyEnd + betLeft) / 2));
 
     // The mode selector is not in this layout: BONUS is the way into a feature
     // buy now. The arrows stay in the tree — autoplay and the tests still drive
@@ -614,21 +684,22 @@ export class UiPanel extends Container {
   /** Portrait: money on top, actions underneath. Same reading order as wide. */
   private layoutCompact(w: number, barH: number, pad: number): void {
     // row 1 — the money group, spread across the width
-    const readTop = 12;
+    const readTop = 14;
     const slot = (w - pad * 2 - 34) / 3;
     const readouts = [this.balReadout, this.winReadout, this.betReadout];
     for (let i = 0; i < readouts.length; i++) {
+      readouts[i].resize(10, 20);
       readouts[i].position.set(pad + i * slot, readTop);
     }
-    this.stepper.setSize(12);
-    this.stepper.position.set(w - pad - 12, readTop + 24);
+    this.stepper.setSize(13);
+    this.stepper.position.set(w - pad - 13, readTop + 16);
 
     // row 2 — actions, with the two money-spending controls on the right
-    const rowY = barH - 46;
-    const bonusR = 27;
+    const rowY = barH - 50;
+    const bonusR = 29;
     this.bonus.setRadius(bonusR);
     this.bonus.position.set(w - pad - bonusR, rowY);
-    const r = 30;
+    const r = 33;
     this.spin.setRadius(r);
     const spinX = w - pad - bonusR * 2 - 16 - r;
     this.spin.position.set(spinX, rowY);
