@@ -568,6 +568,18 @@ export class PixiPresenter implements Presenter {
 
   async totalWin(totalWin: number): Promise<void> { this.lblTotal.text = `TOTAL ${totalWin.toFixed(2)}×`; }
 
+  /**
+   * Take the controls off screen for the biggest moment.
+   *
+   * The reference broadcasts `uiHide` at its top win level, and it is right:
+   * the control bar is the one thing on screen that is not part of the
+   * celebration, and at a max win it is the difference between a moment and a
+   * screenshot with a toolbar in it. Restored unconditionally afterwards.
+   */
+  private showUi(on: boolean): void {
+    if (this.panel) this.panel.visible = on;
+  }
+
   async maxWin(): Promise<void> {
     this.audio?.stinger('maxwin', 'sting_maxwin');
     void shake(this.world, 18, 900, this.ctx);
@@ -582,6 +594,7 @@ export class PixiPresenter implements Presenter {
     }
     this.cam.to(1.14);
     this.cam.kick(18);
+    this.showUi(false);
     await this.banner.show(tierName(15000), 15000, this.ctx, true, {
       onTier: (_name, tier) => {
         this.cam.kick(6 + tier * 3);
@@ -589,6 +602,7 @@ export class PixiPresenter implements Presenter {
           10 + tier * 10);
       },
     });
+    this.showUi(true);
     this.cam.reset();
   }
 

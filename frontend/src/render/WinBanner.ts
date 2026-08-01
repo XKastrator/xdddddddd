@@ -19,16 +19,30 @@ export function tierName(x: number): string {
 }
 
 /**
- * How long the counter runs. A 2000× win that resolves as fast as a 25× one
- * tells the player they are the same size, which is the opposite of the job.
+ * How long the WHOLE presentation runs, count-up plus hold.
+ *
+ * Calibrated against the reference win ladder, which is far more aggressive
+ * than anything I would have written from taste: its levels 1-5 get 0 to 2
+ * seconds and no caption at all, level 6 ("BIG WIN") gets SIX seconds with a
+ * music change, and level 7 ("SUPER WIN") gets EIGHTEEN. We were topping out at
+ * 4.2s for a max win, which tells the player a 15,000x round and a 25x round
+ * are roughly the same event. They are not.
+ *
+ * All of it stays skippable, so a player who does not want the ceremony taps
+ * once and is out of it.
  */
+function presentDuration(win: number): number {
+  return win >= 15000 ? 20000
+    : win >= 1500 ? 16000
+    : win >= 300 ? 12000
+    : win >= 75 ? 9000
+    : win >= 20 ? 6000
+    : 2000;
+}
+
+/** The count-up takes a little over half of it; the rest is the hold. */
 function countDuration(win: number): number {
-  return win >= 15000 ? 4200
-    : win >= 1500 ? 3200
-    : win >= 300 ? 2400
-    : win >= 75 ? 1700
-    : win >= 20 ? 1200
-    : 800;
+  return Math.round(presentDuration(win) * 0.42);
 }
 
 export interface BannerHooks {
@@ -201,7 +215,8 @@ export class WinBanner extends Container {
       this.big?.scale.set(1);
     }
     await tween({
-      duration: win >= 300 ? 900 : 500,
+      duration: ctx.reduced ? 300
+        : win > 0 ? presentDuration(win) - countDuration(win) : 700,
       shouldSkip: ctx.shouldSkip, reducedMotion: ctx.reduced,
       onUpdate: (t) => { if (dressed) this.rays.rotation += 0.0035 * (1 - t * 0.4); },
     });
