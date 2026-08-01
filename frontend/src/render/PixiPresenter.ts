@@ -11,7 +11,7 @@ import { Sym } from '../types/events';
 import { BoardView } from './BoardView';
 import { HeatMeter } from './HeatMeter';
 import { WinBanner, tierName } from './WinBanner';
-import { computeLayout } from './Layout';
+import { computeLayout, GAP_X_FRAC, GAP_Y_FRAC } from './Layout';
 import { THEME } from './palette';
 import { tween, wait } from './tween';
 import { Particles } from './Particles';
@@ -38,7 +38,15 @@ export interface PresenterAssets {
   ui?: UiCallbacks;
 }
 
-const COLS = 6, ROWS = 5, BASE_CELL = 96, BASE_GAP = 8;
+const COLS = 6, ROWS = 5, BASE_CELL = 96;
+/**
+ * Board-local gutters. The world container is scaled by `cell / BASE_CELL`, so
+ * these have to be the SAME fractions of the cell that `computeLayout` reserves
+ * — otherwise the space bought for the board and the space the board occupies
+ * drift apart and the housing creeps off the stage on one axis.
+ */
+const BASE_GAP = Math.round(BASE_CELL * GAP_Y_FRAC);
+const BASE_GAP_X = Math.round(BASE_CELL * GAP_X_FRAC);
 /**
  * Housing thickness in BOARD-LOCAL units. The world container is scaled by
  * `cell / BASE_CELL`, so a constant here is a constant fraction of the cell on
@@ -94,7 +102,7 @@ export class PixiPresenter implements Presenter {
   constructor(private app: Application, private audio?: AudioManager,
               assets: PresenterAssets = {}) {
     this.bg = new Background(assets.scenes ?? {});
-    this.board = new BoardView(COLS, ROWS, BASE_CELL, BASE_GAP,
+    this.board = new BoardView(COLS, ROWS, BASE_CELL, BASE_GAP, BASE_GAP_X,
       assets.getTexture, assets.getWinLoop);
     if (assets.character) {
       this.smith = new Smith(assets.character);
@@ -301,30 +309,42 @@ export class PixiPresenter implements Presenter {
     this.banner.resize(w, playH);
     this.toastView.resize(w, playH);
     this.placeSmith(w, playH, lay.boardX, lay.boardY, lay.boardH);
-    this.placeLogo(w, lay.boardY);
+    this.placeLogo(w, playH, lay.boardX, lay.boardY);
   }
 
   /**
-   * The wordmark sits in the band above the housing. It is sized by the space
-   * actually left over rather than by stage width, and it stands down entirely
-   * when the board has crowded that band out — a clipped logo is worse than no
-   * logo.
+   * The wordmark. On a wide stage it lives IN THE SCENE beside the board; in
+   * portrait it falls back to the band above the housing.
    */
-  private placeLogo(w: number, boardY: number): void {
+  private placeLogo(w: number, h: number, boardX: number, boardY: number): void {
     if (!this.logo) return;
     const tex = this.logo.texture;
-    // everything above the cartouche, which itself sits above the housing
     const scale = this.world.scale.x;
     // everything above the cartouche, which itself sits above the housing
-    const room = boardY - (BASE_BAND * 1.9) * scale;
+    const bandTop = boardY - (BASE_BAND * 1.9) * scale;
     const pad = 6;
-    const maxH = room - pad * 2;
+
+    // WIDE: out in the left gutter, over the room — which is where reference
+    // layouts put it. Squeezing the wordmark into a reserved strip above the
+    // board made it small AND cost the grid the strip; out here it can be three
+    // times the size and costs the board nothing.
+    const gutter = boardX;
+    if (w >= 900 && gutter > w * 0.15) {
+      const maxH = Math.min(h * 0.2, 168);
+      const s = Math.min(maxH / tex.height, (gutter * 0.94) / tex.width);
+      this.logo.visible = true;
+      this.logo.scale.set(s);
+      this.logo.position.set(gutter * 0.5, Math.max(pad, h * 0.03));
+      return;
+    }
+
+    // PORTRAIT: no side room, so it goes back above the housing and has to fit
+    // inside that band on BOTH axes — sizing off stage height instead let the
+    // wordmark grow past its room and get guillotined by the stage edge.
+    const maxH = bandTop - pad * 2;
     if (maxH < 22) { this.logo.visible = false; return; }
     this.logo.visible = true;
-    // Fit INSIDE the band on both axes. Sizing off stage height instead let the
-    // wordmark grow past the room it had and get guillotined by the stage edge —
-    // a clipped logo is worse than a small one.
-    const s = Math.min(maxH / tex.height, (w * 0.42) / tex.width);
+    const s = Math.min(maxH / tex.height, (w * 0.58) / tex.width);
     this.logo.scale.set(s);
     this.logo.position.set(w / 2, pad + (maxH - tex.height * s) / 2);
   }
@@ -344,18 +364,26 @@ export class PixiPresenter implements Presenter {
     this.smith.visible = wide;
     if (!wide) return;
 
-    // He is a hero illustration, not a background prop — size him off the play
-    // area and only fall back to the gutter width when that is the tighter
-    // constraint, so he stays substantial on wide screens.
-    const byHeight = (h * 0.66) / this.smith.artHeight;
-    // He is scenery, not the subject. At 0.94 of the side room he was as tall
-    // as the grid and pulled the eye off it every frame.
-    const byWidth = (sideRoom * 0.66) / this.smith.artWidth;
+    // He is a hero illustration, not a background prop.
+    //
+    // He was sized to fit ENTIRELY inside the gutter beside the board, which on
+    // any normal aspect ratio meant a small dark figure pressed against the
+    // stage edge. Reference compositions run their character at well over half
+    // the frame height and let him OVERLAP the reel housing — he sits behind it
+    // in the display list, so the overlap reads as depth rather than clutter,
+    // and it is the overlap that makes him part of the scene instead of a
+    // sticker beside it.
+    const byHeight = (h * 0.6) / this.smith.artHeight;
+    // 1.15, not 1.3: he is centred at 0.56 of the gutter, so this overlaps the
+    // housing on his right while keeping his far shoulder inside the stage —
+    // a character clipped by the window edge is a mistake, one clipped by the
+    // cabinet is composition
+    const byWidth = (sideRoom * 1.15) / this.smith.artWidth;
     this.smith.scale.set(Math.min(byHeight, byWidth));
     // anchored at the feet, so this is where he STANDS: on the foreground ledge,
     // a little below the board's bottom line
-    this.smith.position.set(sideRoom * 0.5,
-      Math.min(h * 0.93, boardY + boardH * 1.02));
+    this.smith.position.set(sideRoom * 0.56,
+      Math.min(h * 0.95, boardY + boardH * 1.02));
   }
 
   // --- Presenter contract --------------------------------------------------

@@ -16,7 +16,10 @@ export class BoardView extends Container {
   readonly cols: number;
   readonly rows: number;
   readonly cell: number;
+  /** Row gutter — tight, because nothing is drawn between the rows. */
   readonly gap: number;
+  /** Column gutter — wider, because a post stands in it. */
+  readonly gapX: number;
   private cells: SymbolSprite[] = [];
   private bg = new Graphics();
   /**
@@ -30,12 +33,23 @@ export class BoardView extends Container {
   private clip = new Graphics();
   /** Drawn ABOVE the symbols: the chain that shows which cells combined. */
   private links = new Graphics();
+  /**
+   * The posts between the columns, drawn IN FRONT of the symbols.
+   *
+   * A 6x5 grid with nothing between the columns is one field of tiles; the
+   * reference boards run a physical divider down each column boundary, which is
+   * what makes six reels read as six reels. They are in front on purpose — a
+   * post that occludes the edge of a symbol is a post the symbol is behind,
+   * and that is the whole cue. Static, so this is built once.
+   */
+  private posts = new Graphics();
 
-  constructor(cols: number, rows: number, cell: number, gap: number,
+  constructor(cols: number, rows: number, cell: number, gap: number, gapX: number,
               getTexture?: TextureProvider, getWinLoop?: WinLoopProvider) {
     super();
-    this.cols = cols; this.rows = rows; this.cell = cell; this.gap = gap;
-    const w = cols * cell + (cols + 1) * gap;
+    this.cols = cols; this.rows = rows; this.cell = cell;
+    this.gap = gap; this.gapX = gapX;
+    const w = cols * cell + (cols + 1) * gapX;
     const h = rows * cell + (rows + 1) * gap;
     // The reel window is LIT, not translucent.
     //
@@ -62,52 +76,71 @@ export class BoardView extends Container {
     // one gives the grid structure and makes a gap in a fused group visible.
     // Everything here scales with CELL, not with the gutter: the gutter is now
     // hairline-thin by design and ornament tied to it disappeared with it.
-    const r = Math.max(3, cell * 0.09);
-    const line = Math.max(1, cell * 0.012);
+    // The sockets are now only a SHADOW under each plate. Every symbol carries
+    // its own framed tile (see SymbolSprite.drawPlate), so the elaborate carved
+    // well that used to be drawn here would double up with it — two frames per
+    // cell, which reads as noise. What is left is the hole the plate sits in.
+    const r = Math.max(3, cell * 0.11);
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
-        const x = gap + col * (cell + gap);
+        const x = gapX + col * (cell + gapX);
         const y = gap + row * (cell + gap);
-        // the socket floor, dark enough that a lit symbol has something to be
-        // lit against
-        this.bg.roundRect(x, y, cell, cell, r).fill({ color: 0x080c13, alpha: 0.62 });
-        // light from above spills down the inside of the socket and dies out
-        this.bg.roundRect(x, y, cell, cell * 0.46, r)
-          .fill({ color: 0x8ba4c4, alpha: 0.055 });
-        // and pools as shadow where the socket floor meets its far wall
-        this.bg.roundRect(x, y + cell * 0.62, cell, cell * 0.38, r)
-          .fill({ color: 0x000000, alpha: 0.24 });
-        // the cut itself: a dark groove with a bright lip on the near edge
-        this.bg.roundRect(x, y, cell, cell, r)
-          .stroke({ width: line * 1.6, color: 0x000000, alpha: 0.62 });
-        this.bg.moveTo(x + r, y + line).lineTo(x + cell - r, y + line)
-          .stroke({ width: line, color: 0xa8bcd6, alpha: 0.34 });
-        this.bg.moveTo(x + r, y + cell - line).lineTo(x + cell - r, y + cell - line)
-          .stroke({ width: line, color: 0xffb457, alpha: 0.10 });
+        this.bg.roundRect(x, y, cell, cell, r).fill({ color: 0x05080e, alpha: 0.72 });
       }
     }
     this.addChild(this.bg);
-    this.clip.roundRect(gap * 0.4, gap * 0.4, w - gap * 0.8, h - gap * 0.8, gap * 1.4)
+    this.clip.roundRect(gapX * 0.3, gap * 0.4, w - gapX * 0.6, h - gap * 0.8, gap * 1.4)
       .fill({ color: 0xffffff });
     this.symbolLayer.mask = this.clip;
     this.addChild(this.clip, this.symbolLayer);
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         const sp = new SymbolSprite(cell, getTexture, getWinLoop);
-        sp.position.set(gap + c * (cell + gap), gap + r * (cell + gap));
+        sp.position.set(gapX + c * (cell + gapX), gap + r * (cell + gap));
         this.cells.push(sp);
         this.symbolLayer.addChild(sp);
       }
     }
-    this.addChild(this.links);
+    this.buildPosts(w, h);
+    this.addChild(this.posts, this.links);
+  }
+
+  /** Column dividers plus the rails that cap them. */
+  private buildPosts(w: number, h: number): void {
+    const { cols, cell, gapX } = this;
+    const g = this.posts;
+    // Fills most of the gutter. It used to be a fraction of the CELL while the
+    // gutter was five pixels wide, so the post was a hairline that happened to
+    // sit between two columns — present in the code, invisible on screen.
+    const pw = Math.max(6, gapX * 0.82);
+    for (let c = 1; c < cols; c++) {
+      // centred on the gutter between two columns
+      const x = gapX + c * (cell + gapX) - gapX / 2 - pw / 2;
+      g.rect(x, 0, pw, h).fill({ color: 0x0c1119 });
+      // one light source, above and to the left: lit edge left, shadow right
+      g.rect(x, 0, pw * 0.3, h).fill({ color: 0x4a5a70, alpha: 0.65 });
+      g.rect(x + pw * 0.72, 0, pw * 0.28, h).fill({ color: 0x000000, alpha: 0.5 });
+      // brass collars, so the post is built rather than extruded
+      for (const y of [h * 0.02, h * 0.5 - pw * 0.6, h - h * 0.02 - pw * 1.2]) {
+        g.rect(x - pw * 0.22, y, pw * 1.44, pw * 1.2).fill({ color: 0x2a3444 });
+        g.rect(x - pw * 0.22, y, pw * 1.44, pw * 0.34)
+          .fill({ color: 0xc79a52, alpha: 0.55 });
+      }
+    }
+    // top and bottom rails tie the posts together into one structure
+    const rail = Math.max(3, cell * 0.05);
+    g.rect(0, 0, w, rail).fill({ color: 0x0c1119, alpha: 0.9 });
+    g.rect(0, 0, w, rail * 0.34).fill({ color: 0x4a5a70, alpha: 0.5 });
+    g.rect(0, h - rail, w, rail).fill({ color: 0x0c1119, alpha: 0.9 });
   }
 
   /** Home position of a cell in board-local coordinates. */
   private homeOf(r: number, c: number): { x: number; y: number } {
-    return { x: this.gap + c * (this.cell + this.gap), y: this.gap + r * (this.cell + this.gap) };
+    return { x: this.gapX + c * (this.cell + this.gapX),
+             y: this.gap + r * (this.cell + this.gap) };
   }
 
-  get width2(): number { return this.cols * this.cell + (this.cols + 1) * this.gap; }
+  get width2(): number { return this.cols * this.cell + (this.cols + 1) * this.gapX; }
   get height2(): number { return this.rows * this.cell + (this.rows + 1) * this.gap; }
 
   private at(r: number, c: number): SymbolSprite { return this.cells[r * this.cols + c]; }
@@ -115,7 +148,7 @@ export class BoardView extends Container {
   /** Centre of a cell in BoardView-local coordinates (for particle emission). */
   cellCenter(r: number, c: number): { x: number; y: number } {
     return {
-      x: this.gap + c * (this.cell + this.gap) + this.cell / 2,
+      x: this.gapX + c * (this.cell + this.gapX) + this.cell / 2,
       y: this.gap + r * (this.cell + this.gap) + this.cell / 2,
     };
   }

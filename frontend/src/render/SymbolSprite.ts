@@ -8,20 +8,23 @@
 import { Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 import { Deform } from './Deform';
 import { Sym } from '../types/events';
-import { symStyle } from './palette';
+import { mix, symStyle, type SymStyle } from './palette';
 
 export type TextureProvider = (sym: Sym) => Texture | undefined;
 /** Win-loop frames for a symbol, when the art pass has produced them. */
 export type WinLoopProvider = (sym: Sym) => Texture[] | undefined;
 
-/** How much of the cell the authored artwork occupies (glow needs headroom). */
 /**
- * The artwork is drawn inside a padded 256 box, so this oversizes it to fill
- * the cell. At 1.04 every symbol sat in a visible black moat and the grid read
- * as icons in boxes rather than as a slot; the padding in the source art is
- * roughly 12%, so this cancels it.
+ * How much of the cell the authored artwork occupies.
+ *
+ * The source art is drawn inside a padded 256 box. This was pushed to 1.22 to
+ * cancel that padding, because the symbols were sitting in visible black moats
+ * — but the moat was the real problem and the fix was the wrong one. The
+ * symbols now sit on a PLATE that fills the cell, which is what the moat should
+ * always have been, so the art can go back to roughly its authored size and
+ * stay inside its own frame instead of spilling over the plate's edge.
  */
-const ART_FILL = 1.22;
+const ART_FILL = 1.1;
 
 export class SymbolSprite extends Container {
   private glow = new Graphics();
@@ -175,12 +178,84 @@ export class SymbolSprite extends Container {
         .fill({ color: st.ring, alpha: 0.05 + 0.07 * st.glow });
     }
     this.glow.alpha = 1;
-    this.tile.clear();
+    this.drawPlate(st);
     this.txt.text = '';
     this.hasArt = true;
     this.art.visible = true;
     this.art.texture = tex;
     this.art.width = this.art.height = s * ART_FILL;
+  }
+
+  /**
+   * The plate the symbol stands on.
+   *
+   * On a reference board every symbol carries its own framed tile, and the
+   * tile's colour and weight encode the paytable: a low symbol gets a plain
+   * dark slate with a dim rim, a premium gets a bright rim and corner studs,
+   * and a wild or scatter gets a different SILHOUETTE — an octagon, not a
+   * rectangle — so a special is legible before you have looked at the artwork
+   * inside it. Ours had one identical socket behind all thirty cells, which is
+   * why a grid of five differently-coloured crystals read as a puzzle game
+   * rather than as a paytable.
+   *
+   * Drawn per symbol rather than into the board's static background because
+   * that is the only way the plate can change with what is in the cell.
+   */
+  private drawPlate(st: SymStyle): void {
+    const s = this.size;
+    const g = this.tile;
+    g.clear();
+    if (st.rank < 0) return;              // EMPTY: no plate at all
+    const special = st.rank >= 7;
+    const pad = s * 0.03;
+    const w = s - pad * 2;
+    const r = s * 0.13;
+    // The plate is TINTED toward the symbol's own colour. On a reference board
+    // the tiles are visibly different hues — blue behind the sword, purple
+    // behind the royals, amber behind the mug — so the paytable is legible
+    // across the whole grid at a glance, before any artwork has been read. A
+    // single slate behind all thirty cells threw that away. Kept dark: 14% on
+    // ore, 22% on a relic, which is enough to separate the families and not
+    // enough to compete with the illustration standing on it.
+    const body = mix(0x121a26, st.fill, st.ore ? 0.14 : 0.22);
+
+    if (special) {
+      // an octagon: a different outline, readable at a glance across the grid
+      const k = w * 0.29;
+      const pts: number[] = [
+        pad + k, pad, pad + w - k, pad,
+        pad + w, pad + k, pad + w, pad + w - k,
+        pad + w - k, pad + w, pad + k, pad + w,
+        pad, pad + w - k, pad, pad + k,
+      ];
+      g.poly(pts).fill({ color: 0x101a22, alpha: 0.95 });
+      g.poly(pts).stroke({ width: Math.max(2, s * 0.035), color: st.ring, alpha: 0.95 });
+      g.poly(pts).fill({ color: st.ring, alpha: 0.07 });
+      return;
+    }
+
+    g.roundRect(pad, pad, w, w, r).fill({ color: body, alpha: 0.94 });
+    // light from above runs down the face and dies out
+    g.roundRect(pad, pad, w, w * 0.5, r).fill({ color: 0x9db4d4, alpha: 0.06 });
+    // the rim carries the value: dim brass on ore, bright metal on a premium
+    const rim = Math.max(1.5, s * (st.ore ? 0.018 : 0.028));
+    g.roundRect(pad + rim / 2, pad + rim / 2, w - rim, w - rim, r * 0.9)
+      .stroke({ width: rim, color: st.ring, alpha: st.ore ? 0.34 : 0.72 });
+    // and a hot inner line on the top ranks, so a crown is never mistaken for iron
+    if (st.rank >= 4) {
+      g.roundRect(pad + rim * 1.9, pad + rim * 1.9, w - rim * 3.8, w - rim * 3.8, r * 0.7)
+        .stroke({ width: Math.max(1, s * 0.008), color: st.ring, alpha: 0.3 });
+    }
+    // corner studs, on relics only — the fixings that hold a real plate down
+    if (!st.ore) {
+      const d = s * 0.115;
+      const rr = Math.max(1.2, s * 0.017);
+      for (const [cx, cy] of [[pad + d, pad + d], [pad + w - d, pad + d],
+                              [pad + d, pad + w - d], [pad + w - d, pad + w - d]]) {
+        g.circle(cx, cy, rr).fill({ color: 0x0b0e14 });
+        g.circle(cx, cy - rr * 0.25, rr * 0.62).fill({ color: st.ring, alpha: 0.75 });
+      }
+    }
   }
 
   /** Fallback: procedural shapes (no binary assets required). */

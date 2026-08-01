@@ -577,23 +577,28 @@ export class UiPanel extends Container {
     this.h = barH;
     this.position.set(0, h - barH);
 
-    const pad = Math.max(14, w * 0.02);
-    // Translucent, so the room the game is set in runs behind the controls
-    // instead of being cut off by a solid plate. Stacked bands fake a vertical
-    // gradient — the bar has to stay readable over a bright background, and a
-    // single flat alpha is either too light at the top or too heavy at the
-    // bottom. Pixi has no gradient fill for Graphics without a texture.
+    // The bar FLOATS.
+    //
+    // A full-width strip anchored to the stage edge cuts the room off at the
+    // bottom and reads as browser chrome bolted under the game. Reference bars
+    // are an inset rounded plate sitting INSIDE the scene, with the artwork
+    // continuing around and behind them — which is what makes the controls feel
+    // like part of the game rather than a toolbar it happens to be sitting in.
+    const inset = Math.max(10, Math.round(w * 0.014));
+    const drop = Math.max(8, Math.round(barH * 0.13));
+    const plateH = barH - drop;
+    const pad = inset + Math.max(14, w * 0.014);
     this.bar.clear();
-    const bands = 8;
-    for (let i = 0; i < bands; i++) {
-      const t0 = i / bands;
-      this.bar.rect(0, barH * t0, w, barH / bands + 1)
-        .fill({ color: 0x05070b, alpha: 0.30 + 0.48 * t0 });
-    }
-    this.bar.rect(0, 0, w, 1).fill({ color: 0xffffff, alpha: 0.10 });
+    const r = plateH * 0.34;
+    this.bar.roundRect(inset + 2, 4, w - inset * 2, plateH, r)
+      .fill({ color: 0x000000, alpha: 0.35 });
+    this.bar.roundRect(inset, 0, w - inset * 2, plateH, r)
+      .fill({ color: 0x070a10, alpha: 0.74 });
+    this.bar.roundRect(inset + 0.5, 0.5, w - inset * 2 - 1, plateH - 1, r)
+      .stroke({ width: 1, color: 0xffffff, alpha: 0.13 });
 
-    if (compact) this.layoutCompact(w, barH, pad);
-    else this.layoutWide(w, barH, pad);
+    if (compact) this.layoutCompact(w, plateH, pad);
+    else this.layoutWide(w, plateH, pad);
     return barH;
   }
 
@@ -662,8 +667,8 @@ export class UiPanel extends Container {
     // rules reads as spacing. Both are drawn only where a real gap exists.
     const rule = (rx: number) => {
       if (rx < pad || rx > w - pad) return;
-      this.bar.moveTo(rx, mid - barH * 0.24).lineTo(rx, mid + barH * 0.24)
-        .stroke({ width: 1, color: 0xffffff, alpha: 0.12 });
+      this.bar.moveTo(rx, mid - barH * 0.28).lineTo(rx, mid + barH * 0.28)
+        .stroke({ width: 1, color: 0xffffff, alpha: 0.16 });
     };
     rule(Math.round((leftEnd + (leftEnd + 34)) / 2));
     const betLeft = stepX - 26 - this.betReadout.width2;
@@ -685,10 +690,13 @@ export class UiPanel extends Container {
   private layoutCompact(w: number, barH: number, pad: number): void {
     // row 1 — the money group, spread across the width
     const readTop = 14;
-    const slot = (w - pad * 2 - 34) / 3;
+    // Sized to the slot they actually get. At 20px a six-figure balance was
+    // wider than its third of a 390px bar and ran into WIN.
+    const slot = (w - pad * 2 - 30) / 3;
+    const valS = Math.max(14, Math.min(20, Math.round(slot * 0.19)));
     const readouts = [this.balReadout, this.winReadout, this.betReadout];
     for (let i = 0; i < readouts.length; i++) {
-      readouts[i].resize(10, 20);
+      readouts[i].resize(9, valS);
       readouts[i].position.set(pad + i * slot, readTop);
     }
     this.stepper.setSize(13);
