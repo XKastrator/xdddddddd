@@ -198,3 +198,109 @@ def relic_payout(board, paytable: S.Paytable) -> float:
 
 def clone(board) -> list:
     return [row[:] for row in board]
+
+
+# --------------------------------------------------------------------------- #
+# THE VEIN  —  the mechanic that replaces rank fusion.
+#
+# A vein is a connected run of one ore type that reaches ALL THE WAY DOWN: it
+# must touch the top row (the seam face the miners are cutting) AND the bottom
+# row (the crucible). Nothing else pays. Flux substitutes for any ore, so it can
+# bridge a gap, and one Flux cell may serve several veins at once.
+#
+# Why this instead of "4+ alike fuse up a rank":
+#   * There is ONE question on screen for the whole spin — does it get through?
+#     The player reads the board top-to-bottom looking for a specific thing,
+#     instead of scanning for any four cells that happen to touch.
+#   * The near-miss is REAL and visible: a vein that stops one row short of the
+#     crucible is a fact about the board, not a manufactured tease.
+#   * It pays on SHAPE, not on count. A vein that snakes across all six columns
+#     is a different event from a straight drop, and it looks like one.
+# --------------------------------------------------------------------------- #
+
+@dataclass
+class VeinRecord:
+    """One vein that connected the seam to the crucible."""
+    sym: int                 # the ore it is made of
+    cells: list              # [(r, c), ...] ore cells
+    wild_cells: list         # [(r, c), ...] Flux cells bridging it
+    columns: int             # how many distinct columns it crosses
+    value: float             # x bet, BEFORE Heat
+
+
+@dataclass
+class VeinStep:
+    veins: list = field(default_factory=list)
+    heat_gain: int = 0
+
+
+def find_veins(board) -> list:
+    """Every seam-to-crucible run on the board, one entry per ore type.
+
+    Flooded per ore type with WILD traversable, so a Flux can carry a vein
+    across a gap without silently welding two different ores into one run.
+    A wild may appear in more than one vein; an ore cell cannot.
+    """
+    rows, cols = len(board), len(board[0])
+    out = []
+    for ore in S.ORE_VARIANTS:
+        seen = [[False] * cols for _ in range(rows)]
+        for r0 in range(rows):
+            for c0 in range(cols):
+                if seen[r0][c0] or board[r0][c0] != ore:
+                    continue
+                q = deque([(r0, c0)])
+                seen[r0][c0] = True
+                ore_cells, wild_cells = [], []
+                touch_top = touch_bottom = False
+                while q:
+                    r, c = q.popleft()
+                    if board[r][c] == S.WILD:
+                        wild_cells.append((r, c))
+                    else:
+                        ore_cells.append((r, c))
+                    if r == 0:
+                        touch_top = True
+                    if r == rows - 1:
+                        touch_bottom = True
+                    for nr, nc in _neighbors(r, c, rows, cols):
+                        if seen[nr][nc]:
+                            continue
+                        nsym = board[nr][nc]
+                        if nsym == ore or nsym == S.WILD:
+                            seen[nr][nc] = True
+                            q.append((nr, nc))
+                if touch_top and touch_bottom:
+                    columns = len({c for _, c in ore_cells + wild_cells})
+                    out.append({"sym": ore, "cells": ore_cells,
+                                "wild_cells": wild_cells, "columns": columns})
+    return out
+
+
+def resolve_veins(board, column_pay, length_bonus: float) -> VeinStep:
+    """Pay and clear every vein on the board (mutates board).
+
+    All veins resolve together. Ore cells are consumed; a Flux is consumed too,
+    but only once even if several veins ran through it.
+    """
+    rows = len(board)
+    step = VeinStep()
+    found = find_veins(board)
+    for v in found:
+        n = len(v["cells"]) + len(v["wild_cells"])
+        base = column_pay.get(v["columns"], column_pay[max(column_pay)])
+        # a vein longer than the shortest possible one is worth proportionally
+        # more, but the COLUMN count is what drives the tail
+        value = base * (1.0 + length_bonus * max(0, n - rows))
+        step.veins.append(VeinRecord(
+            sym=v["sym"], cells=list(v["cells"]),
+            wild_cells=list(v["wild_cells"]), columns=v["columns"],
+            value=value,
+        ))
+    for v in step.veins:
+        for (r, c) in v.cells:
+            board[r][c] = S.EMPTY
+        for (r, c) in v.wild_cells:
+            board[r][c] = S.EMPTY
+    step.heat_gain = len(step.veins)
+    return step
