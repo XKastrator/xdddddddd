@@ -103,7 +103,7 @@ export class PixiPresenter implements Presenter {
               assets: PresenterAssets = {}) {
     this.bg = new Background(assets.scenes ?? {});
     this.board = new BoardView(COLS, ROWS, BASE_CELL, BASE_GAP, BASE_GAP_X,
-      assets.getTexture, assets.getWinLoop);
+      assets.getTexture, assets.getWinLoop, assets.font ?? null);
     if (assets.character) {
       this.smith = new Smith(assets.character);
       this.smithHolder.addChild(this.smith);
@@ -465,16 +465,30 @@ export class PixiPresenter implements Presenter {
     // grid. Previously this was a cross-fade plus a banner over a board that
     // never moved — the round changed and the game did not visibly change with
     // it, which is why entering a bonus felt like nothing had happened.
+    // 1. CAUSE. The cinders that triggered this leave the grid as objects and
+    //    collide in the middle. Without this the biggest moment in the game had
+    //    nothing on screen explaining why it was happening.
+    this.cam.to(1.05);
+    const hit = await this.board.gatherScatters(this.ctx);
+    this.fx.enabled = !this.reduced;
+    this.fx.burst(hit.x, hit.y, 26, 3.2, THEME.amber);
+    this.cam.kick(mode === 'molten_core' ? 15 : 11);
+    this.flashChroma(0.7, 620);
+    this.audio?.stinger('win', mode === 'molten_core' ? 'sting_super' : 'sting_bonus');
+
+    // 2. CONSEQUENCE. The old board leaves, the room changes underneath it,
+    //    and only then does the banner arrive on an empty grid.
     this.cam.to(0.94);            // pull back — the round is changing shape
     await this.board.sweepOut(this.ctx);
     const room = this.bg.to(scene, this.ctx);
-    this.flashChroma(0.55, 720);
     void shake(this.world, mode === 'molten_core' ? 9 : 6, 520, this.ctx);
-    this.audio?.stinger('win', mode === 'molten_core' ? 'sting_super' : 'sting_bonus');
     await room;
     this.cam.kick(mode === 'molten_core' ? 14 : 10);
     this.cam.to(1);
-    await this.banner.show(mode === 'molten_core' ? 'SUPERBONUS' : 'BONUS', 0, this.ctx);
+    // the count of free spins is the fact the player wants; it goes where the
+    // win total goes on a big win, because that is where they are already looking
+    await this.banner.show(mode === 'molten_core' ? 'SUPERBONUS' : 'BONUS', 0,
+      this.ctx, false, undefined, `${spins} SPINS`);
   }
 
   async spinCounter(remaining: number, total: number): Promise<void> {

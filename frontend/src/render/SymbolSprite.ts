@@ -70,6 +70,19 @@ export class SymbolSprite extends Container {
     this.setSymbol(Sym.EMPTY);
   }
 
+  /**
+   * Motion blur, the way a reel actually does it: the strip is stretched along
+   * the axis it is travelling and dimmed, so a fast column reads as a smear
+   * rather than as thirty legible pictures flickering. A real blur filter would
+   * be a render-target round trip per column per frame, which is exactly the
+   * cost this renderer already had to be rescued from.
+   */
+  setBlur(amount: number): void {
+    const b = Math.max(0, Math.min(1, amount));
+    this.scale.set(1, 1 + b * 0.42);
+    this.alpha = 1 - b * 0.2;
+  }
+
   /** True for relics: they are hot metal and get idle life. Ore stays inert. */
   get animatable(): boolean {
     return this.sym >= Sym.BRONZE && this.sym <= Sym.CINDER;

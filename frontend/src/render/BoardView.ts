@@ -9,6 +9,8 @@ import { Sym } from '../types/events';
 import { SymbolSprite, type TextureProvider, type WinLoopProvider } from './SymbolSprite';
 import { tween, wait, easeOutBack, easeOutCubic } from './tween';
 import { squash, pulse } from './juice';
+import { GlyphText, type GlyphFont } from './GlyphText';
+import { symStyle } from './palette';
 
 export interface AnimCtx { shouldSkip: () => boolean; reduced: boolean; }
 
@@ -43,9 +45,37 @@ export class BoardView extends Container {
    * and that is the whole cue. Static, so this is built once.
    */
   private posts = new Graphics();
+  /**
+   * One extra sprite per column.
+   *
+   * A reel is a CONTINUOUS strip: symbols run past the window and wrap around.
+   * With exactly `rows` sprites per column the strip is one gutter shorter than
+   * the window, so the wrap shows as a seam travelling through the reel. The
+   * spare makes the strip taller than the window, which is the whole trick.
+   * Hidden except while spinning.
+   */
+  private spare: SymbolSprite[] = [];
+  /** Symbols the spinning strip cycles through. Presentation only. */
+  private static readonly STRIP: Sym[] = [
+    Sym.O1, Sym.O2, Sym.O3, Sym.O4, Sym.O5,
+    Sym.BRONZE, Sym.IRON, Sym.SILVER, Sym.GOLD, Sym.MYTHRIL,
+    Sym.O1, Sym.O3, Sym.O5, Sym.O2, Sym.O4,
+  ];
+
+  /**
+   * Floating "x5" callouts over a fusion anchor.
+   *
+   * The loudest complaint about this game was that you cannot tell what is
+   * happening — symbols vanish and a gold bar appears, with nothing on screen
+   * saying that FIVE of them combined INTO it. A count popping over the anchor
+   * as the group is drawn in states the rule in one glance, every time it
+   * fires, without a tutorial.
+   */
+  private callouts: GlyphText[] = [];
 
   constructor(cols: number, rows: number, cell: number, gap: number, gapX: number,
-              getTexture?: TextureProvider, getWinLoop?: WinLoopProvider) {
+              getTexture?: TextureProvider, getWinLoop?: WinLoopProvider,
+              private font: GlyphFont | null = null) {
     super();
     this.cols = cols; this.rows = rows; this.cell = cell;
     this.gap = gap; this.gapX = gapX;
@@ -101,8 +131,40 @@ export class BoardView extends Container {
         this.symbolLayer.addChild(sp);
       }
     }
+    for (let c = 0; c < cols; c++) {
+      const sp = new SymbolSprite(cell, getTexture, getWinLoop);
+      sp.position.set(gapX + c * (cell + gapX), 0);
+      sp.visible = false;
+      this.spare.push(sp);
+      this.symbolLayer.addChild(sp);
+    }
     this.buildPosts(w, h);
     this.addChild(this.posts, this.links);
+  }
+
+  /** A pooled callout, parented above everything on the board. */
+  private callout(i: number): GlyphText {
+    while (this.callouts.length <= i) {
+      const t = new GlyphText(this.font, {
+        size: Math.round(this.cell * 0.32), tint: 0xfff0c4,
+        align: 'center', letterSpacing: 2,
+      });
+      t.visible = false;
+      this.callouts.push(t);
+      this.addChild(t);
+    }
+    return this.callouts[i];
+  }
+
+  /**
+   * The strip for one column, top to bottom: the spare sits at index 0, one
+   * slot ABOVE the window, and the visible rows follow. Slot i sits at
+   * `gap + (i - 1) * (cell + gap)` when the strip is at rest.
+   */
+  private strip(c: number): SymbolSprite[] {
+    const out: SymbolSprite[] = [this.spare[c]];
+    for (let r = 0; r < this.rows; r++) out.push(this.at(r, c));
+    return out;
   }
 
   /** Column dividers plus the rails that cap them. */
@@ -180,74 +242,117 @@ export class BoardView extends Container {
   }
 
   /**
-   * The spin reveal: symbols stream down into the grid, column by column.
+   * THE SPIN.
    *
-   * This replaced `setBoard` on the reveal event, which placed the whole board
-   * in a single frame. A slot whose board teleports has no spin — the player
-   * sees a picture change, and every other piece of polish is wasted on top of
-   * that. The motion follows the shape commercial reels use: a short
-   * acceleration, a brief travel, then an ease-out into the stop, staggered
-   * across columns so the board resolves left to right instead of all at once.
+   * What was here before moved the final symbols in from above with a column
+   * stagger. It was not a spin: the board the player was about to see was
+   * already decided AND already on screen, sliding down. A slot spins because
+   * the reel is a continuous strip running past a window fast enough to blur,
+   * and because it STOPS one column at a time — that stop, repeated six times,
+   * is the entire rhythm of the game. Without it there is no anticipation to
+   * build on and nothing for a scatter to interrupt.
    *
-   * `holdFrom` is the anticipation hook. Columns from that index on take far
-   * longer and arrive one at a time, which is the deliberate slowing every slot
-   * uses when the reels still standing could complete a trigger. It is driven
-   * by the scatter count already in the event stream, so it never promises
-   * something the round cannot deliver.
+   * So: accelerate, run a wrapping strip under motion blur, then land each
+   * column in turn with an overshoot. `holdFrom` keeps the last columns
+   * spinning far longer, which is the deliberate slowing every slot uses when
+   * the reels still running could complete a trigger. It is driven by the
+   * scatter count already in the event stream, so it never promises something
+   * the round cannot deliver.
+   *
+   * Reduced motion — and the frame-rate guard, which routes through the same
+   * flag — collapses this to one short move. It must not delete it: a board
+   * that appears in a single frame is the exact failure this method exists to
+   * fix, and the weakest devices would be the only ones still getting it.
    */
   async reveal(board: Board, ctx: AnimCtx, holdFrom = -1): Promise<void> {
-    this.setBoard(board);
-    // Reduced motion — and the frame-rate guard, which routes through the same
-    // flag — SHORTENS this. It must not delete it: a board that appears in one
-    // frame is the exact failure this method exists to fix, and the players on
-    // the weakest devices would have been the only ones still getting it.
-    const brisk = ctx.reduced;
-    const travel = this.height2 + this.cell;
-    const held = (c: number) => holdFrom >= 0 && c >= holdFrom;
-    // Column start times, in units of one column's own fall duration.
-    const starts: number[] = [];
-    let t = 0;
-    for (let c = 0; c < this.cols; c++) {
-      starts.push(t);
-      // a held column does not overlap the next one — it lands alone, which is
-      // what makes the pause read as suspense rather than as lag
-      t += held(c) ? 1.35 : 0.34;
-    }
-    const span = starts[this.cols - 1] + (held(this.cols - 1) ? 1.35 : 1);
-    // Brisk mode collapses the reveal into one short move instead of merely
-    // shortening each column. Keeping the stagger and cutting the fall still
-    // cost ~240ms PER SPIN, and a resumed bonus round replays a hundred of
-    // them — the catch-up replay went from instant to over a minute, which is
-    // a hang as far as the player is concerned.
-    const fall = brisk ? 60 / span : 300;
-    const total = Math.max(60, Math.round(fall * span));
+    if (ctx.reduced) { await this.briskReveal(board, ctx); return; }
 
-    const entries: { sp: SymbolSprite; homeY: number; start: number; slow: boolean }[] = [];
-    for (let r = 0; r < this.rows; r++) {
-      for (let c = 0; c < this.cols; c++) {
-        const sp = this.at(r, c);
-        const home = this.homeOf(r, c);
-        sp.y = home.y - travel;
-        // rows inside a column arrive as a stack, top first, like a strip
-        entries.push({ sp, homeY: home.y, start: starts[c] + r * 0.05, slow: held(c) });
-      }
+    const { cols, rows, cell, gap } = this;
+    const pitch = cell + gap;
+    const P = (rows + 1) * pitch;          // one full turn of the strip
+    const held = (c: number) => holdFrom >= 0 && c >= holdFrom;
+
+    // Timing. A column takes ~55ms to move one symbol past the window at full
+    // speed, which is about where a commercial reel sits: fast enough to smear,
+    // slow enough that the strip still reads as objects rather than as noise.
+    const V = pitch / 55;                  // px per ms
+    const ACC = 140;
+    const RUN = 240;
+    const STAGGER = 95;
+    const HOLD = 620;                      // extra run on an anticipating column
+    const STOP = 300;
+    const LEAD = pitch * 1.35;             // how far above home a column lands from
+
+    const stopAt: number[] = [];
+    let extra = 0;
+    for (let c = 0; c < cols; c++) {
+      if (held(c)) extra += HOLD;
+      stopAt.push(ACC + RUN + c * STAGGER + extra);
+    }
+    const total = stopAt[cols - 1] + STOP;
+
+    // travelled distance at time t, integrating the ramp then the plateau
+    const dist = (t: number) => (t < ACC
+      ? (V * t * t) / (2 * ACC)
+      : (V * ACC) / 2 + V * (t - ACC));
+    const speed = (t: number) => (t < ACC ? (V * t) / ACC : V);
+
+    const strips = Array.from({ length: cols }, (_, c) => this.strip(c));
+    const prev = strips.map(() => new Array<number>(rows + 1).fill(0));
+    const landed = new Array<boolean>(cols).fill(false);
+    for (let c = 0; c < cols; c++) {
+      for (const sp of strips[c]) { sp.visible = true; sp.alpha = 1; }
     }
 
     await tween({
       duration: total, ease: (x) => x, shouldSkip: ctx.shouldSkip,
       onUpdate: (x) => {
-        const now = x * span;
-        for (const e of entries) {
-          const local = Math.max(0, Math.min(1, (now - e.start) / (e.slow ? 1.25 : 1)));
-          e.sp.y = e.homeY - travel * (1 - easeOutCubic(local));
+        const now = x * total;
+        for (let c = 0; c < cols; c++) {
+          const st = strips[c];
+          if (now < stopAt[c]) {
+            const off = dist(now);
+            const blur = speed(now) / V;
+            for (let i = 0; i <= rows; i++) {
+              const pos = (i * pitch + off) % P;
+              // the strip wrapped past the bottom: this sprite is re-entering
+              // from the top, so give it a new face
+              if (pos < prev[c][i]) {
+                st[i].setSymbol(BoardView.STRIP[
+                  (Math.random() * BoardView.STRIP.length) | 0]);
+              }
+              prev[c][i] = pos;
+              st[i].y = gap + pos - pitch;
+              st[i].setBlur(blur);
+            }
+          } else {
+            // First frame past this column's stop time: the outcome goes on
+            // the strip, and from here the column is landing, not spinning.
+            if (!landed[c]) {
+              landed[c] = true;
+              this.spare[c].visible = false;
+              for (let r = 0; r < rows; r++) {
+                this.at(r, c).setSymbol(board[r]?.[c] ?? Sym.EMPTY);
+              }
+            }
+            const p = Math.min(1, (now - stopAt[c]) / STOP);
+            const k = LEAD * (1 - easeOutBack(p));
+            for (let r = 0; r < rows; r++) {
+              const sp = this.at(r, c);
+              sp.y = gap + r * pitch + k;
+              sp.setBlur((1 - p) * 0.55);
+            }
+          }
         }
       },
     });
-    for (const e of entries) e.sp.y = e.homeY;
-    // the bottom row carries the impact; squashing all thirty would be noise
-    if (brisk) return;
+
+    // Unconditional: a skip resolves the tween early, and a column left mid-flight
+    // would keep a stretched scale and a stale symbol for the rest of the round.
+    this.settleStrips(board);
+    // the bottom row carries the impact; bending all thirty would be noise
     await Promise.all(
-      Array.from({ length: this.cols }, (_, c) => this.at(this.rows - 1, c))
+      Array.from({ length: cols }, (_, c) => this.at(rows - 1, c))
         .map((sp) => this.land(sp, 0.5, ctx)));
   }
 
@@ -271,6 +376,114 @@ export class BoardView extends Container {
       return;
     }
     await squash(sp, 0.16, 170, ctx);
+  }
+
+  /** Put every cell home, unblurred, holding the outcome. */
+  private settleStrips(board: Board): void {
+    for (const sp of this.spare) { sp.visible = false; sp.setBlur(0); }
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const sp = this.at(r, c);
+        sp.setSymbol(board[r]?.[c] ?? Sym.EMPTY);
+        sp.setBlur(0);
+        sp.scale.set(1);
+        sp.alpha = 1;
+        const home = this.homeOf(r, c);
+        sp.x = home.x; sp.y = home.y;
+      }
+    }
+  }
+
+  /**
+   * The reduced-motion path: ONE short move, not a shortened spin.
+   *
+   * Keeping the stagger and merely cutting the durations still cost ~240ms per
+   * spin, and a resumed bonus round replays a hundred of them — the catch-up
+   * went from instant to over a minute, which is a hang as far as the player is
+   * concerned.
+   */
+  private async briskReveal(board: Board, ctx: AnimCtx): Promise<void> {
+    this.settleStrips(board);
+    const travel = this.height2 + this.cell;
+    const homes = this.cells.map((sp) => sp.y);
+    for (let i = 0; i < this.cells.length; i++) this.cells[i].y = homes[i] - travel;
+    await tween({
+      duration: 60, ease: easeOutCubic, shouldSkip: ctx.shouldSkip,
+      onUpdate: (t) => {
+        for (let i = 0; i < this.cells.length; i++) {
+          this.cells[i].y = homes[i] - travel * (1 - t);
+        }
+      },
+    });
+    for (let i = 0; i < this.cells.length; i++) this.cells[i].y = homes[i];
+  }
+
+  /**
+   * The scatters that triggered the round fly to the middle and collide.
+   *
+   * Bonus entry used to be: the board slides away, the room cross-fades, a
+   * banner appears. Nothing in that sequence referred to the symbols that
+   * actually caused it, so the most important moment in the game had no cause
+   * on screen. The cinders now leave the grid as objects, gather, and go off
+   * together — which is what every commercial trigger does, because the player
+   * has to see WHY.
+   *
+   * Returns the collision point in board-local coordinates so the caller can
+   * put particles and a shockwave there.
+   */
+  async gatherScatters(ctx: AnimCtx): Promise<{ x: number; y: number }> {
+    const cx = this.width2 / 2, cy = this.height2 / 2;
+    if (ctx.reduced) return { x: cx, y: cy };
+    const found: { sp: SymbolSprite; x: number; y: number }[] = [];
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const sp = this.at(r, c);
+        if (sp.sym !== Sym.CINDER) continue;
+        found.push({ sp, x: sp.x, y: sp.y });
+      }
+    }
+    if (!found.length) return { x: cx, y: cy };
+
+    // everything that is NOT a scatter recedes, so the cinders are the subject
+    const rest = this.cells.filter((sp) => sp.sym !== Sym.CINDER);
+    for (const e of found) this.symbolLayer.setChildIndex(e.sp, this.symbolLayer.children.length - 1);
+
+    await tween({
+      duration: 380, ease: easeOutCubic, shouldSkip: ctx.shouldSkip,
+      onUpdate: (t) => {
+        for (const sp of rest) sp.alpha = 1 - 0.75 * t;
+        for (const e of found) {
+          e.sp.scale.set(1 + 0.45 * t);
+          e.sp.rotation = t * 0.6;
+        }
+        const g = this.links;
+        g.clear();
+        for (const e of found) {
+          g.moveTo(e.x + this.cell / 2, e.y + this.cell / 2).lineTo(cx, cy)
+            .stroke({ width: 2 + 5 * t, color: 0xffb457, alpha: 0.7 * t, cap: 'round' });
+        }
+      },
+    });
+    await tween({
+      duration: 260, ease: (x) => x * x, shouldSkip: ctx.shouldSkip,
+      onUpdate: (t) => {
+        for (const e of found) {
+          e.sp.x = e.x + (cx - this.cell / 2 - e.x) * t;
+          e.sp.y = e.y + (cy - this.cell / 2 - e.y) * t;
+          e.sp.rotation = 0.6 + t * 2.4;
+          e.sp.scale.set(1.45 - 0.5 * t);
+        }
+        this.links.alpha = 1 - t;
+      },
+    });
+    for (const e of found) {
+      e.sp.rotation = 0; e.sp.scale.set(1); e.sp.x = e.x; e.sp.y = e.y;
+      e.sp.setSymbol(Sym.EMPTY);
+    }
+    for (const sp of rest) sp.alpha = 1;
+    this.links.clear();
+    this.links.alpha = 1;
+    return { x: cx, y: cy };
   }
 
   /**
@@ -368,13 +581,21 @@ export class BoardView extends Container {
                 .stroke({ width: 3 + 3 * seg, color: 0xffc46a,
                   alpha: 0.85, cap: 'round' });
             }
-            // each cell lights the instant the spark reaches it
+            // Each cell lights the instant the spark reaches it — and it is
+            // OUTLINED, not merely glowed. A halo says "something happened
+            // here"; a frame around the exact cell says "this one is IN the
+            // group", which is the fact the animation exists to communicate.
             for (let i = 0; i < ch.nodes.length; i++) {
               const lit = Math.max(0, Math.min(1, head - i));
               if (lit <= 0) continue;
               const p = pts[i];
-              g.circle(p.x, p.y, this.cell * (0.30 + 0.22 * lit))
-                .fill({ color: 0xffe0a0, alpha: 0.34 * (1 - lit) + 0.10 });
+              const half = this.cell * 0.5;
+              const rr = this.cell * 0.14;
+              g.roundRect(p.x - half, p.y - half, this.cell, this.cell, rr)
+                .fill({ color: 0xffcf7a, alpha: 0.16 * lit });
+              g.roundRect(p.x - half, p.y - half, this.cell, this.cell, rr)
+                .stroke({ width: Math.max(2, this.cell * 0.035),
+                  color: 0xffe0a0, alpha: 0.35 + 0.6 * lit });
               ch.nodes[i].sp.scale.set(1 + 0.22 * Math.sin(lit * Math.PI));
             }
           }
@@ -383,10 +604,31 @@ export class BoardView extends Container {
     }
 
     // ---- 2. DRAW THE CHAIN INTO THE ANCHOR --------------------------------
+    // The count rides the pull-in, so the number the player reads is on screen
+    // at the exact moment the cells disappear into one.
+    const tags = fusions.map((f, i) => {
+      const t = this.callout(i);
+      t.text = `×${f.cells.length + f.wildCells.length}`;
+      const p = this.cellCenter(f.anchor[0], f.anchor[1]);
+      // A callout is centre-aligned, so an anchor in the first or last column
+      // would hang half of it outside the reel window. Clamped to the BOARD,
+      // not to the cell — the label belongs to the group, not to one square.
+      const halfTag = Math.max(this.cell * 0.6, t.contentWidth / 2 + this.cell * 0.1);
+      t.position.set(
+        Math.max(halfTag, Math.min(this.width2 - halfTag, p.x)),
+        Math.max(this.cell * 0.5, p.y - this.cell * 0.5));
+      t.visible = !ctx.reduced;
+      t.alpha = 0;
+      return t;
+    });
     await tween({
       duration: ctx.reduced ? 90 : 300, ease: easeOutCubic,
       shouldSkip: ctx.shouldSkip,
       onUpdate: (t) => {
+        for (const tag of tags) {
+          tag.alpha = Math.min(1, t * 2.2);
+          tag.scale.set(0.7 + 0.5 * easeOutBack(Math.min(1, t * 1.6)));
+        }
         const pull = t * t;
         let i = 0;
         for (const ch of chains) {
@@ -436,13 +678,26 @@ export class BoardView extends Container {
         },
       }).then(() => this.links.clear());
     }
+    // the count becomes the NAME of what was made: "x5", then "IRON", in the
+    // same place, so the sentence reads itself
+    for (let i = 0; i < fusions.length; i++) tags[i].text = symStyle(fusions[i].to).name;
     await tween({
       duration: ctx.reduced ? 80 : 320, ease: easeOutBack,
       shouldSkip: ctx.shouldSkip,
-      onUpdate: (t) => { for (const sp of anchors) sp.scale.set(0.2 + 0.8 * t); },
+      onUpdate: (t) => {
+        for (const sp of anchors) sp.scale.set(0.2 + 0.8 * t);
+        for (const tag of tags) { tag.alpha = 1; tag.scale.set(0.8 + 0.32 * t); }
+      },
     });
     // the product is struck hardest — this is the hammer blow of the round
     await Promise.all(anchors.map((sp) => this.land(sp, 0.85, ctx)));
+    await tween({
+      duration: ctx.reduced ? 40 : 300, shouldSkip: ctx.shouldSkip,
+      onUpdate: (t) => {
+        for (const tag of tags) { tag.alpha = 1 - t; tag.y -= this.cell * 0.012; }
+      },
+    });
+    for (const tag of tags) tag.visible = false;
   }
 
   /**

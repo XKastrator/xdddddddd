@@ -23,6 +23,8 @@ export interface SymStyle {
   fill: number;
   ring: number;
   label: string;
+  /** Player-facing name, shown when a fusion produces this symbol. */
+  name: string;
   glow: number;     // 0..1 emissive strength (relics glow, ore doesn't)
   ore: boolean;
   /**
@@ -47,18 +49,18 @@ const ORE_GLYPHS = ['▲', '■', '◆', '⬢', '●'];
 export function symStyle(sym: Sym): SymStyle {
   if (sym >= Sym.O1 && sym <= Sym.O5) {
     const i = sym - Sym.O1;
-    return { fill: ORE_TINTS[i], ring: 0x6b5433, label: ORE_GLYPHS[i], glow: 0, ore: true, rank: 0 };
+    return { fill: ORE_TINTS[i], ring: 0x6b5433, label: ORE_GLYPHS[i], name: 'ORE', glow: 0, ore: true, rank: 0 };
   }
   switch (sym) {
-    case Sym.BRONZE: return { fill: 0xb08d57, ring: 0xd8b57e, label: 'I', glow: 0.35, ore: false, rank: 1 };
-    case Sym.IRON: return { fill: 0x9fa7ad, ring: 0xd7dee3, label: 'II', glow: 0.45, ore: false, rank: 2 };
-    case Sym.SILVER: return { fill: 0xd6dde3, ring: 0xffffff, label: 'III', glow: 0.6, ore: false, rank: 3 };
-    case Sym.GOLD: return { fill: 0xf2c14e, ring: 0xfff0c0, label: 'IV', glow: 0.8, ore: false, rank: 4 };
-    case Sym.MYTHRIL: return { fill: 0x6fe3c8, ring: 0xbafff0, label: 'V', glow: 0.9, ore: false, rank: 5 };
-    case Sym.CROWN: return { fill: 0xffcf6b, ring: 0xff7a18, label: '♛', glow: 1, ore: false, rank: 6 };
-    case Sym.FLUX: return { fill: 0x0c2b28, ring: 0x37e0c8, label: '≈', glow: 0.7, ore: false, rank: 7 };
-    case Sym.CINDER: return { fill: 0x3a1e05, ring: 0xffb347, label: '✦', glow: 0.85, ore: false, rank: 7 };
-    default: return { fill: 0x0f0b07, ring: 0x2a2018, label: '', glow: 0, ore: true, rank: -1 };
+    case Sym.BRONZE: return { fill: 0xb08d57, ring: 0xd8b57e, label: 'I', name: 'BRONZE', glow: 0.35, ore: false, rank: 1 };
+    case Sym.IRON: return { fill: 0x9fa7ad, ring: 0xd7dee3, label: 'II', name: 'IRON', glow: 0.45, ore: false, rank: 2 };
+    case Sym.SILVER: return { fill: 0xd6dde3, ring: 0xffffff, label: 'III', name: 'SILVER', glow: 0.6, ore: false, rank: 3 };
+    case Sym.GOLD: return { fill: 0xf2c14e, ring: 0xfff0c0, label: 'IV', name: 'GOLD', glow: 0.8, ore: false, rank: 4 };
+    case Sym.MYTHRIL: return { fill: 0x6fe3c8, ring: 0xbafff0, label: 'V', name: 'MYTHRIL', glow: 0.9, ore: false, rank: 5 };
+    case Sym.CROWN: return { fill: 0xffcf6b, ring: 0xff7a18, label: '♛', name: 'CROWN', glow: 1, ore: false, rank: 6 };
+    case Sym.FLUX: return { fill: 0x0c2b28, ring: 0x37e0c8, label: '≈', name: 'FLUX', glow: 0.7, ore: false, rank: 7 };
+    case Sym.CINDER: return { fill: 0x3a1e05, ring: 0xffb347, label: '✦', name: 'CINDER', glow: 0.85, ore: false, rank: 7 };
+    default: return { fill: 0x0f0b07, ring: 0x2a2018, label: '', name: '', glow: 0, ore: true, rank: -1 };
   }
 }
 

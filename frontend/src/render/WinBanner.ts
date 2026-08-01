@@ -124,10 +124,19 @@ export class WinBanner extends Container {
    */
   async show(tag: string, win: number,
              ctx: { shouldSkip: () => boolean; reduced: boolean },
-             climb = false, hooks?: BannerHooks): Promise<void> {
+             climb = false, hooks?: BannerHooks, subtitle?: string): Promise<void> {
     if (this.tag) this.tag.text = climb ? TIERS[0] : tag;
-    if (this.big) { this.big.text = win > 0 ? '0.00×' : ''; this.big.scale.set(1); }
-    const dressed = win > 0 && !ctx.reduced;
+    if (this.big) {
+      // `subtitle` is for banners with nothing to count — BONUS, SUPERBONUS —
+      // which were showing a caption over an empty space. The number of free
+      // spins the player just won is the one fact that belongs there.
+      this.big.text = win > 0 ? '0.00×' : (subtitle ?? '');
+      this.big.scale.set(1);
+    }
+    // The burst runs for EVERY banner, not only for one with a counter. Bonus
+    // entry passes win = 0, so the single most important celebration in the
+    // game was the one getting a bare scrim with two lines of text on it.
+    const dressed = !ctx.reduced;
     this.rays.visible = dressed;
     this.halo.visible = dressed;
     this.rays.rotation = 0;
@@ -176,6 +185,21 @@ export class WinBanner extends Container {
       this.big?.scale.set(1);
     }
     // the hold is not dead air: the burst keeps turning under the total
+    if (win <= 0 && dressed) {
+      // a banner with no counter still needs the burst to OPEN, or it appears
+      // fully formed and reads as a static card
+      await tween({
+        duration: 420, ease: easeOutCubic,
+        shouldSkip: ctx.shouldSkip, reducedMotion: ctx.reduced,
+        onUpdate: (t) => {
+          this.rays.rotation = t * 0.5;
+          this.rays.scale.set(0.6 + 0.4 * t);
+          this.halo.scale.set(0.6 + 0.5 * t);
+          this.big?.scale.set(0.7 + 0.3 * easeOutCubic(Math.min(1, t * 1.5)));
+        },
+      });
+      this.big?.scale.set(1);
+    }
     await tween({
       duration: win >= 300 ? 900 : 500,
       shouldSkip: ctx.shouldSkip, reducedMotion: ctx.reduced,
