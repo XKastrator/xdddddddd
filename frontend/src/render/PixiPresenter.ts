@@ -462,7 +462,7 @@ export class PixiPresenter implements Presenter {
     this.audio?.stinger('forge', big ? 'sfx_forge_big' : 'sfx_forge');
     this.smith?.play('strike');
     this.cam.kick(Math.min(9, 2 + biggest * 0.7));
-    await this.board.forge(fusions, this.ctx);
+    await this.board.forge(fusions, this.ctx, heat);
     // the hammer landing: impact scales with the size of the group that fused
     void shake(this.world, big ? 9 : 4.5, big ? 300 : 190, this.ctx);
     // sparks at each forged relic; bigger jumps throw more embers
@@ -490,14 +490,21 @@ export class PixiPresenter implements Presenter {
     await wait(this.reduced ? 40 : 200, () => this.skip, this.reduced);
   }
 
+  /** Rail state, so either readout can be refreshed without clearing the other. */
+  private railSpins = '';
+  private railVault = '';
+  private syncRails(): void { this.frame.setRails(this.railSpins, this.railVault); }
+
   async bonusStart(mode: string, spins: number, kind: SpinKind): Promise<void> {
     this.kind = kind;
     this.heatMeter.setCap(HEAT_CAP[kind]);
     this.lblMode.text = mode === 'molten_core' ? 'MOLTEN CORE' : 'FORGE FURY';
     this.roundTitle = this.lblMode.text;
     this.frame.setTitle(this.roundTitle);
-    if (mode === 'molten_core') this.lblVault.text = 'VAULT 0.00×';
+    if (mode === 'molten_core') { this.lblVault.text = 'VAULT 0.00×'; this.railVault = 'VAULT 0.00×'; }
     this.lblSpins.text = `SPINS ${spins}`;
+    this.railSpins = `SPINS ${spins}`;
+    this.syncRails();
     this.audio?.enterState(mode === 'molten_core' ? 'super' : 'bonus');
     const scene = mode === 'molten_core' ? 'super' : 'bonus';
 
@@ -534,6 +541,8 @@ export class PixiPresenter implements Presenter {
 
   async spinCounter(remaining: number, total: number): Promise<void> {
     this.lblSpins.text = `SPIN ${total - remaining}/${total}`;
+    this.railSpins = `SPIN ${total - remaining}/${total}`;
+    this.syncRails();
   }
 
   async retrigger(added: number, _spins: number): Promise<void> {
@@ -548,11 +557,15 @@ export class PixiPresenter implements Presenter {
 
   async lockUpdate(_locked: Relic[], vault: number): Promise<void> {
     this.lblVault.text = `VAULT ${vault.toFixed(2)}×`;
+    this.railVault = `VAULT ${vault.toFixed(2)}×`;
+    this.syncRails();
     await wait(this.reduced ? 20 : 120, () => this.skip, this.reduced);
   }
 
   async pour(vault: number, _heat: number, win: number): Promise<void> {
     this.lblVault.text = `VAULT ${vault.toFixed(2)}×`;
+    this.railVault = `VAULT ${vault.toFixed(2)}×`;
+    this.syncRails();
     this.audio?.stinger('super', 'sting_pour');
     void shake(this.world, 14, 700, this.ctx);
     this.flashChroma(0.5, 900);
@@ -636,9 +649,12 @@ export class PixiPresenter implements Presenter {
   }
 
   async roundEnd(): Promise<void> {
-    // the round is over: the forge cools back to its resting scene
+    // the round is over: the forge cools back to its resting scene, and the
+    // rails clear so a base spin never shows a stale bonus counter
     this.roundTitle = 'THE DEEPFORGE';
     this.frame.setTitle(this.roundTitle);
+    this.railSpins = ''; this.railVault = '';
+    this.syncRails();
     this.frame.setHeat(0);
     await this.bg.to('base', this.ctx);
   }

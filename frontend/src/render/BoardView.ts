@@ -686,7 +686,7 @@ export class BoardView extends Container {
     for (const sp of cells) sp.scale.set(1);
   }
 
-  async forge(fusions: Fusion[], ctx: AnimCtx): Promise<void> {
+  async forge(fusions: Fusion[], ctx: AnimCtx, heat = 1): Promise<void> {
     // ---- 1. IGNITE ALONG THE CHAIN ---------------------------------------
     // The old version flared every cell at once and slid them all inward, so a
     // fusion read as "some things moved" — you could not see WHICH cells
@@ -828,9 +828,17 @@ export class BoardView extends Container {
         },
       }).then(() => this.links.clear());
     }
-    // the count becomes the NAME of what was made: "x5", then "IRON", in the
-    // same place, so the sentence reads itself
-    for (let i = 0; i < fusions.length; i++) tags[i].text = symStyle(fusions[i].to).name;
+    // The count becomes the NAME of what was made and WHAT IT PAID, in the same
+    // place, so the whole sentence reads itself: five cells went in, an iron
+    // came out, it credited 1.35x. Without the money the player can see that
+    // something combined and still have no idea whether it mattered — which is
+    // exactly the complaint. `value` is the base paytable amount; Heat is the
+    // multiplier applied at the instant it is forged, so the product of the two
+    // is the number that actually reached the balance.
+    for (let i = 0; i < fusions.length; i++) {
+      const paid = fusions[i].value * heat;
+      tags[i].text = `${symStyle(fusions[i].to).name} ${paid.toFixed(2)}×`;
+    }
     await tween({
       duration: ctx.reduced ? 80 : 320, ease: easeOutBack,
       shouldSkip: ctx.shouldSkip,

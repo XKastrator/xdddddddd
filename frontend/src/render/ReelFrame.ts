@@ -42,6 +42,18 @@ export class ReelFrame extends Container {
   private base = new Graphics();
   private accents = new Graphics();
   private title: GlyphText | null = null;
+  /**
+   * Two readouts machined into the TOP rail, either side of the cartouche.
+   *
+   * The free-spin count and the vault total used to live in a corner HUD that
+   * was deleted for duplicating the control bar — and they went with it. During
+   * a bonus the player could not see how many spins were left, and during the
+   * super bonus the vault, which is the entire point of that mode, was
+   * invisible. The reference game carries a dedicated FreeSpinCounter for
+   * exactly this reason. They belong on the cabinet, not in a floating corner.
+   */
+  private railL: GlyphText | null = null;
+  private railR: GlyphText | null = null;
   private w = 0;
   private h = 0;
   private gap = 8;
@@ -67,7 +79,22 @@ export class ReelFrame extends Container {
     super();
     this.addChild(this.base, this.accents);
     this.title = new GlyphText(font, { size: 15, align: 'center', letterSpacing: 3 });
-    this.addChild(this.title);
+    this.railL = new GlyphText(font, { size: 12, align: 'left', letterSpacing: 2,
+      tint: 0xf4ece0 });
+    this.railR = new GlyphText(font, { size: 12, align: 'right', letterSpacing: 2,
+      tint: 0x37e0c8 });
+    this.railL.visible = false;
+    this.railR.visible = false;
+    this.addChild(this.title, this.railL, this.railR);
+  }
+
+  /**
+   * Left and right readouts on the top rail. Empty string hides one, so a base
+   * round shows a clean rail and a bonus shows the two numbers that matter.
+   */
+  setRails(left: string, right: string): void {
+    if (this.railL) { this.railL.text = left; this.railL.visible = left !== ''; }
+    if (this.railR) { this.railR.text = right; this.railR.visible = right !== ''; }
   }
 
   /** Text shown in the cartouche above the grid. */
@@ -227,6 +254,18 @@ export class ReelFrame extends Container {
     if (this.title) {
       this.title.setTint(heat > 0.5 ? 0xffe9c2 : 0xf4ece0);
       this.title.position.set(w / 2, cy + ch * 0.5 + band * 0.28);
+    }
+    // the rail readouts sit inboard of the corner fittings, on the rail's own
+    // centre line, so they read as stamped into the metal
+    const railY = -band * 0.5 + band * 0.24;
+    const inset = armX + band * 0.5;
+    if (this.railL) {
+      this.railL.setSize(Math.max(9, Math.round(band * 0.5)));
+      this.railL.position.set(-band + inset, railY);
+    }
+    if (this.railR) {
+      this.railR.setSize(Math.max(9, Math.round(band * 0.5)));
+      this.railR.position.set(w + band - inset, railY);
     }
   }
 
